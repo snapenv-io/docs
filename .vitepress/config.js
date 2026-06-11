@@ -5,6 +5,7 @@ export default defineConfig({
   description: 'Secure environment variables for dev teams',
   lang: 'en-US',
   cleanUrls: true,
+  sitemap: { hostname: 'https://docs.snapenv.io' },
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
