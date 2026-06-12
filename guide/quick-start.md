@@ -26,10 +26,6 @@ Copy the token — it's shown once.
 ## 5. Install the CLI
 
 ```bash
-# macOS
-brew install snapenv
-
-# Linux / CI
 curl -fsSL https://snapenv.io/install.sh | sh
 ```
 

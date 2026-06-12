@@ -12,14 +12,10 @@ The `snapenv` binary is a single static executable. No runtime required.
 ## Install
 
 ```bash
-# macOS (Homebrew)
-brew install snapenv
-
-# Linux / macOS (one-liner)
 curl -fsSL https://snapenv.io/install.sh | sh
 ```
 
-The install script downloads the correct binary for your platform to `~/.local/bin/snapenv` and makes it executable.
+The install script detects your platform and architecture, downloads the correct binary to `~/.local/bin/snapenv`, and makes it executable.
 
 ### Manual download
 
