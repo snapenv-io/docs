@@ -10,6 +10,8 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
     ['meta', { name: 'theme-color', content: '#6366f1' }],
+    ['script', { async: '', src: 'https://www.googletagmanager.com/gtag/js?id=G-LY5RDED34Z' }],
+    ['script', {}, `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-LY5RDED34Z');`],
   ],
 
   themeConfig: {
