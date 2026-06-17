@@ -73,58 +73,23 @@ spec:
 
 The operator computes a SHA-256 hash of all variable values after every sync. If the hash matches the previous sync, no restart is triggered. Both `Deployment` and `StatefulSet` are supported.
 
-## Real-time sync via webhook
+## Smart polling — only syncs when something changed
 
-By default, the operator polls SnapEnv every 30 minutes as a fallback. To sync **immediately** when variables change, set up a webhook.
+The operator uses HTTP conditional requests so polls are nearly free when nothing has changed.
 
-**1. Expose the operator's webhook port (`:8082`):**
+**How it works:**
 
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: snapenv-operator-webhook
-  namespace: snapenv-operator
-spec:
-  selector:
-    app: snapenv-operator
-  ports:
-    - port: 80
-      targetPort: 8082
-```
+1. On the first pull, the API returns the dotenv body plus an `ETag` header — a short hash of the variable content.
+2. The operator stores that hash in `status.dataHash`.
+3. On every subsequent poll, the operator sends `If-None-Match: "<hash>"` with the request.
+4. If nothing changed, the API returns **`304 Not Modified`** with no body. The operator skips processing, skips the audit log, and re-schedules — the round trip costs almost nothing.
+5. Only when variables actually change does the API return `200` with the new content, and only then does the operator update the Secret (and restart linked Deployments).
 
-Then create an Ingress or use a LoadBalancer to make it reachable from the internet.
-
-**2. Register the webhook URL in SnapEnv:**
-
-Go to your workspace → **Integrations** → **Kubernetes Operator** and set your webhook URL:
-
-```
-https://your-operator-ingress.example.com/webhook
-```
-
-SnapEnv will POST to this URL whenever variables are updated. The operator finds all `SnapEnvSecret` resources matching the project and env, and reconciles them immediately.
-
-**3. (Optional) Verify webhook signatures:**
-
-Set `WEBHOOK_SECRET` on the operator pod to enable HMAC-SHA256 signature verification. SnapEnv signs each request with the same secret, and the operator rejects requests with invalid signatures.
-
-```yaml
-env:
-  - name: WEBHOOK_SECRET
-    valueFrom:
-      secretKeyRef:
-        name: snapenv-operator-config
-        key: webhookSecret
-```
-
-The signature is sent in the `X-Snapenv-Signature: sha256=<hex>` header.
-
-With webhooks configured, you can raise the fallback poll interval to reduce API calls:
+This means you can poll frequently without hammering the API or cluttering the audit log. The default `syncInterval` of `30m` is conservative — feel free to lower it:
 
 ```yaml
 spec:
-  syncInterval: 12h   # just a safety net
+  syncInterval: 5m   # cheap — only does real work when variables change
 ```
 
 ## CRD reference
@@ -151,7 +116,7 @@ kubectl describe ses api-prod
 | `lastSyncTime` | Time of last successful sync |
 | `lastSyncError` | Error message from last failed sync |
 | `variableCount` | Number of variables written |
-| `dataHash` | Short fingerprint of the last synced content — used to detect changes |
+| `dataHash` | Content hash of the last synced variables — sent as `If-None-Match` on the next poll to get a cheap 304 when nothing changed |
 
 ## Dashboard connection status
 
