@@ -90,6 +90,16 @@ X-SnapEnv-Client: operator   (optional — used by k8s operator to track sync ti
 
 Response: `text/plain` dotenv format.
 
+The dotenv body also appends synthetic **context variables** —
+`SNAPENV_PROJECT`, `SNAPENV_ENV`, `SNAPENV_PROJECT_NAME` — so consumers can
+introspect their source. They are never stored, and a user-defined variable of
+the same name wins. Values are static, so the response `ETag` (used by the k8s
+operator for `304` conditional sync) stays stable. Suppress with
+`?metadata=false`.
+
+Multi-line values are emitted double-quoted with escaped newlines so they
+survive standard dotenv parsing.
+
 ## GET /v1/projects/:id/envs/:env/export
 
 Download all variables as a file.
@@ -97,4 +107,5 @@ Download all variables as a file.
 ```
 ?format=dotenv   (default) or k8s
 ?reveal=true     include plaintext values (requires write perm)
+?metadata=false  omit the injected SNAPENV_* context variables (default: on)
 ```
