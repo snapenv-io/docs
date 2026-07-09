@@ -26,7 +26,7 @@ Copy the token — it's shown once.
 ## 5. Install the CLI
 
 ```bash
-curl -fsSL https://snapenv.io/install.sh | sh
+curl -fsSL https://get.snapenv.io/install.sh | sh
 ```
 
 ## 6. Authenticate

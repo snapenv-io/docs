@@ -12,7 +12,7 @@ The `snapenv` binary is a single static executable. No runtime required.
 ## Install
 
 ```bash
-curl -fsSL https://snapenv.io/install.sh | sh
+curl -fsSL https://get.snapenv.io/install.sh | sh
 ```
 
 The install script detects your platform and architecture, downloads the correct binary to `~/.local/bin/snapenv`, and makes it executable.

@@ -19,7 +19,7 @@ Optionally store your project ID as a variable: **Variables → New variable**, 
     SNAPENV_PROJECT: ${{ vars.SNAPENV_PROJECT }}
     SNAPENV_ENV: prod
   run: |
-    curl -fsSL https://snapenv.io/install.sh | sh
+    curl -fsSL https://get.snapenv.io/install.sh | sh
     snapenv pull --env prod
     # Variables are now in .env
 ```
@@ -56,7 +56,7 @@ To avoid downloading the CLI on every run, cache it:
 - name: Install snapenv
   run: |
     if ! command -v snapenv &> /dev/null; then
-      curl -fsSL https://snapenv.io/install.sh | sh
+      curl -fsSL https://get.snapenv.io/install.sh | sh
     fi
 ```
 
