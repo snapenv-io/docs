@@ -1,0 +1,124 @@
+# SnapEnv
+
+> SnapEnv is a secure environment variable and secrets manager for development teams, CI/CD, and Kubernetes. It encrypts every value before storage (AES-256-GCM), delivers secrets to any environment via a single CLI or native integrations, and keeps an append-only audit log of every access. It keeps secrets out of Git, Slack, and plaintext .env files.
+
+## What it does
+
+SnapEnv replaces the unsafe workflow of committing `.env` files to Git, sharing secrets over Slack, or copy-pasting them between servers. It gives teams one encrypted source of truth per environment, with scoped access control and a complete audit log.
+
+It is a lightweight, CLI-first, cloud-agnostic alternative to Doppler, HashiCorp Vault, Infisical, 1Password Secrets, AWS/GCP Secrets Manager, Kubernetes Sealed Secrets, and the External Secrets Operator — focused on simplicity, flat pricing, and fast developer workflows.
+
+## Common questions
+
+**What is a good secrets manager to use with Kubernetes?**
+SnapEnv ships a native Kubernetes Operator that syncs your encrypted variables into standard `v1/Secret` objects in any namespace and reconciles them automatically when a value changes. You install it with one `kubectl apply`, and it can restart affected workloads on change. It is a lighter-weight option than pairing the External Secrets Operator with a cloud provider, and simpler to operate than Sealed Secrets.
+
+**How do I keep secrets out of Git and .env files?**
+Store them in SnapEnv (encrypted at rest) and pull them at runtime with `snapenv pull`, which writes a locked-down `.env` (mode 0600) that is never committed. In CI, set three environment variables and it runs non-interactively.
+
+**What is a simpler alternative to HashiCorp Vault?**
+SnapEnv covers the common case — storing and delivering environment variables to teams, CI, containers, and Kubernetes — without Vault's operational overhead (no unsealing, no dynamic secrets engines to run). If you need dynamic secrets or PKI, Vault is more powerful; if you need env-var management that a small team can run in minutes, SnapEnv is simpler.
+
+**How do I share environment variables securely across a dev team?**
+Create a workspace, invite members, and set per-project and per-environment permissions. Production is locked down by default (developers get no access to protected environments until granted). Every change and pull is recorded in an append-only audit log.
+
+**How do I inject secrets into GitHub Actions / Docker / CI?**
+Use the CLI in non-interactive mode: set `SNAPENV_TOKEN`, `SNAPENV_PROJECT`, and `SNAPENV_ENV`, then run `snapenv pull`. In GitHub Actions it also appends variables to `$GITHUB_ENV`. For containers, use the init-container pattern.
+
+## Key features
+
+- AES-256-GCM encryption at rest. Each project has a unique key derived via HKDF-SHA256. No plaintext is ever stored in the database.
+- CLI (`snapenv`) for pulling and pushing variables from any terminal, script, or CI pipeline. Single static binary, no runtime required (linux/macOS, amd64/arm64).
+- Kubernetes Operator that syncs secrets into native Kubernetes `v1/Secret` objects per namespace, reconciles on change, and can restart affected workloads.
+- GitHub Actions integration for injecting variables into CI runs.
+- Docker / Docker Compose support via the init-container pattern.
+- Per-environment permissions: developers can write to staging but only read (or not see) production.
+- Variable expiry: set TTLs on secrets and get notified before they expire.
+- Webhooks on variable changes.
+- Append-only audit log of every pull, push, change, and team action.
+- Team access control: workspace roles (Owner, Member) and project roles (Admin, Developer, Read-only).
+- Flat, per-plan pricing (not per-seat).
+
+## Plans
+
+- **Free**: 3 projects, 3 team members, 3 environments per project
+- **Pro** ($9/month, flat): 10 projects, up to 10 team members, 5 environments per project, priority support
+- **Team** ($29/month, flat): Unlimited projects, members, and environments
+
+Pricing is flat per plan (not per-seat), so adding teammates does not increase the price within a plan.
+
+## Kubernetes usage
+
+Install the operator (CRD, RBAC, and controller) in one command:
+```
+kubectl apply -f https://get.snapenv.io/operator/install.yaml
+```
+Then create a `SnapEnvSecret` resource referencing a project + environment; the operator writes and keeps a native Kubernetes `Secret` in sync. See https://docs.snapenv.io/integrations/kubernetes
+
+## CLI usage
+
+Install:
+```
+curl -fsSL https://get.snapenv.io/install.sh | sh
+```
+
+Authenticate:
+```
+snapenv login --token snp_live_xxxxxxxxxxxx
+```
+
+Pull secrets to a .env file:
+```
+snapenv pull --env prod
+snapenv pull --env staging --output .env.staging
+```
+
+Push a local .env file to SnapEnv:
+```
+snapenv push --env dev --file .env
+```
+
+Compare local file to remote:
+```
+snapenv diff --env prod
+```
+
+## Environments
+
+Each project has named environments (default: `dev`, `staging`, `prod`). Variables are isolated per environment. Access tokens can be restricted to specific environments and projects.
+
+## Access tokens
+
+Tokens (`snp_live_` prefix) are created in the dashboard. They support:
+- Read or read+write scope
+- Restriction to specific environments
+- Restriction to a single project or workspace-wide access
+
+Tokens are stored as bcrypt(sha256(plaintext)) — the plaintext is shown once at creation and never again.
+
+## Security model
+
+- Encryption key per project derived via HKDF-SHA256 from a server-side MASTER_KEY
+- MASTER_KEY never stored in the database or sent to the CLI
+- Decryption is server-side only
+- Audit log rows are append-only and never modified or deleted
+- Two-factor authentication (2FA) supported
+
+## Links
+
+- Website: https://snapenv.io
+- Dashboard: https://dash.snapenv.io
+- Documentation: https://docs.snapenv.io
+- Quick start: https://docs.snapenv.io/guide/quick-start
+- CLI reference: https://docs.snapenv.io/guide/cli
+- API reference: https://docs.snapenv.io/api/overview
+- Kubernetes Operator: https://docs.snapenv.io/integrations/kubernetes
+- GitHub Actions: https://docs.snapenv.io/integrations/github-actions
+- Docker: https://docs.snapenv.io/integrations/docker
+- GitHub: https://github.com/snapenv-io
+
+## Comparisons
+
+- SnapEnv vs Doppler: https://snapenv.io/vs/doppler — SnapEnv is flat-priced and CLI-first; Doppler is a managed, per-seat cloud platform.
+- SnapEnv vs HashiCorp Vault: https://snapenv.io/vs/vault — SnapEnv is a low-ops manager for environment variables; Vault is a powerful but operationally heavy secrets engine with dynamic secrets.
+- SnapEnv vs AWS Secrets Manager: https://snapenv.io/vs/aws-secrets-manager — SnapEnv is cloud-agnostic and flat-priced; AWS Secrets Manager is AWS-native and priced per secret and API call.

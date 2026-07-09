@@ -1,0 +1,1987 @@
+# SnapEnv — Full Documentation
+
+> Secure environment variable & secrets manager for dev teams, CI/CD, and Kubernetes. Full documentation concatenated for language models. Canonical index: https://snapenv.io/llms.txt
+
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/
+==============================================================================
+
+
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/introduction
+==============================================================================
+
+# Introduction
+
+SnapEnv is a secure environment variable manager for dev teams and production servers. It stores your secrets encrypted, delivers them anywhere via CLI or native integrations, and keeps a full audit trail of every access.
+
+## Why SnapEnv?
+
+The typical workflow — `.env` files committed to git, shared over Slack, copy-pasted between servers — is a liability. SnapEnv replaces it with:
+
+- **One source of truth** per environment (`dev`, `staging`, `prod`)
+- **Encrypted storage** — AES-256-GCM, unique key per project, zero plaintext in the database
+- **Scoped access** — developers can write to staging, read-only on production
+- **Audit trail** — every pull, push, and change is recorded
+
+## Architecture
+
+```
+dash.snapenv.io  (dashboard)
+       │  JWT or snp_live_ token
+       ▼
+api.snapenv.io   (Go + Gin API)
+       │  pgx connection pool
+       ▼
+PostgreSQL       (encrypted variable values)
+```
+
+The API is stateless. Web sessions use short-lived JWTs. CLI and CI authenticate with `snp_live_` access tokens that you create in the dashboard.
+
+## Next steps
+
+- [Quick start](/guide/quick-start) — create a project and pull your first secret
+- [CLI installation](/guide/cli) — install the `snapenv` binary
+- [Access tokens](/guide/tokens) — create scoped credentials for your tools
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/quick-start
+==============================================================================
+
+# Quick start
+
+Get from zero to `snapenv pull` in under 5 minutes.
+
+## 1. Create an account
+
+Sign up at [dash.snapenv.io](https://dash.snapenv.io/signup). A workspace is created automatically.
+
+## 2. Create a project
+
+Click **New project** in the dashboard. Give it a name and choose which environments you need (`dev`, `staging`, `prod` are created by default).
+
+## 3. Add variables
+
+Open the project → select an environment → click **Add variable**. Or paste a `.env` file directly into the bulk import area.
+
+## 4. Create an access token
+
+Go to **Settings → Access tokens → New token**. Choose:
+- **Scope** — `read` for pulling only, `write` for push too
+- **Environments** — restrict which envs the token can access
+- **Project** — leave blank for workspace-wide, or pin to one project
+
+Copy the token — it's shown once.
+
+## 5. Install the CLI
+
+```bash
+curl -fsSL https://get.snapenv.io/install.sh | sh
+```
+
+## 6. Authenticate
+
+```bash
+snapenv login --token snp_live_xxxxxxxxxxxx
+```
+
+## 7. Pull your secrets
+
+```bash
+snapenv pull --env prod
+# ✓ 14 variables written to .env
+```
+
+That's it. Your `.env` file is populated and ready.
+
+## What's next?
+
+- Set up [GitHub Actions](/integrations/github-actions) to pull secrets in CI
+- Deploy the [Kubernetes Operator](/integrations/kubernetes) for automatic sync
+- Review the [permission model](/guide/permissions) for your team
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/variables
+==============================================================================
+
+# Variables
+
+Variables are the core resource in SnapEnv. Each variable belongs to a project + environment combination.
+
+## Types
+
+| Type | Description |
+|---|---|
+| `secret` | Value is masked in the UI by default. Shown only with explicit reveal. |
+| `plain` | Value is always visible. Use for non-sensitive config like feature flags or region names. |
+
+## Adding variables
+
+In the dashboard, open a project → select an environment → click **Add variable**. You can also bulk-import by pasting a `.env` file directly.
+
+## Editing
+
+Click any variable row to edit. Changes are saved immediately. Every change creates a history entry.
+
+## Bulk operations
+
+Select multiple variables using the checkbox column to:
+- **Delete** — permanently removes selected keys from the environment
+- **Change type** — toggle between `secret` and `plain` in one action
+
+## Variable history
+
+Every write (create, update, delete) is recorded. Click a variable → **History** to see all versions with timestamps and actors. Click **Restore** on any entry to roll back to that value.
+
+## Expiry dates
+
+Set an expiry date on a variable to track when a credential needs rotating. SnapEnv sends an email reminder when a secret is within 7 days of expiry.
+
+See [Variable expiry](/guide/expiry) for details.
+
+## Masked values
+
+By default, values are shown as `•••••••`. Click the eye icon to reveal. Your preference (always show / always mask) is saved per account in Settings.
+
+## Copying across environments
+
+Use the dashboard's copy feature to duplicate a variable's value from one environment to another, or use the API to read from one env and write to another.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/environments
+==============================================================================
+
+# Environments
+
+Each project has one or more environments. Variables are scoped per environment — `DATABASE_URL` in `prod` is completely independent from `DATABASE_URL` in `staging`.
+
+## Default environments
+
+New projects are created with `dev`, `staging`, and `prod` by default.
+
+## Protected environments
+
+Environments can be marked **protected** to keep production secrets out of reach of every
+developer by default. `prod` and `production` are protected automatically; you can protect
+any environment (e.g. a prod-like `live` or `eu-prod`) with the 🔒 **Protect env** button in
+the project toolbar — Owners only.
+
+On a protected environment, members with the **Developer** project role get **no default
+access** (they can't read or write its secrets) unless an Owner or Admin grants them an
+explicit per-environment permission. Admins, Read-only members, and Owners are unaffected.
+See [Permissions → Protected environments](/guide/permissions#protected-environments).
+
+## Adding environments
+
+Project → **Settings → Environments → Add**. Enter a name (e.g. `canary`, `eu-prod`, `qa`).
+
+## Deleting environments
+
+Project → **Settings → Environments → Delete**. This permanently deletes all variables in that environment. This action cannot be undone.
+
+## Using environments in the CLI
+
+```bash
+snapenv pull --env prod
+snapenv pull --env staging
+snapenv pull --env canary
+```
+
+## Environment colors
+
+Each environment has an associated color used throughout the dashboard UI (`prod` = red, `staging` = yellow, `dev` = green by default). You can customize colors per project.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/encryption
+==============================================================================
+
+# Encryption
+
+Your secrets are encrypted at rest and in transit. Security is built into SnapEnv by default — there's nothing to configure.
+
+## Encryption at rest
+
+- **AES-256-GCM** — every variable value is encrypted before it's written to the database.
+- **A unique key per project** — projects are cryptographically isolated, so exposure of one project's data never affects another.
+- **Server-side decryption only** — values are only decrypted when you explicitly read or pull them through an authenticated, authorized request.
+- **No plaintext in the database** — the database stores ciphertext only. Even a full database dump contains no readable secrets and no keys.
+
+## Credentials
+
+- **Access tokens** and **passwords** are stored as one-way hashes, never in plaintext.
+- An access token's plaintext value is shown **once** at creation and never again.
+
+## Encryption in transit
+
+All traffic to SnapEnv is served over **HTTPS (TLS 1.2+)**, including the dashboard, API, and CLI.
+
+## Key handling
+
+Encryption keys are managed entirely server-side. They are never returned by the API, never sent to the CLI or dashboard, and never written to logs.
+
+## Additional protection
+
+- **Two-factor authentication (2FA)** for accounts — see [Two-Factor Authentication](/guide/2fa).
+- **Append-only audit log** of every access and change — see [Audit Log](/guide/audit).
+- **Scoped, revocable access tokens** for machines and CI — see [Access Tokens](/guide/tokens).
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/permissions
+==============================================================================
+
+# Permissions
+
+SnapEnv enforces three layers of access control on every request.
+
+## Layer 1: Workspace role
+
+| Role | Access |
+|---|---|
+| **Owner** | Full access to all projects, all environments, billing, and team management. Bypasses all project-level checks. |
+| **Member** | Access is determined by project roles. |
+
+## Layer 2: Project role
+
+Assigned per user per project. The role sets **default** environment permissions,
+which depend on whether an environment is [protected](#protected-environments):
+
+| Role | Protected env (e.g. prod) | Unprotected env (e.g. dev/staging) |
+|---|---|---|
+| **Admin** | write | write |
+| **Developer** | **none** | write |
+| **Read-only** | read | read |
+
+Developers get **no default access to protected environments** — least privilege,
+so production secrets aren't exposed to every developer. An Admin or Owner can still
+grant a specific developer `read` or `write` on a protected environment using a
+per-environment override (Layer 3).
+
+These are the defaults — individual environment permissions can always be overridden.
+
+## Protected environments
+
+Each environment carries a **`protected`** flag. `prod` and `production` are protected
+by default; every other environment starts unprotected. Protection is what drives the
+"Developer gets no default access" rule above — and it keys off the flag, **not** the
+environment's name, so a production environment named `live` or `main` is fully covered
+once you mark it protected.
+
+Protecting an environment **only** changes the default for the **Developer** role. It does
+**not** restrict Owners, Admins, or Read-only members, and it doesn't change how secrets
+are stored (everything is AES-256 encrypted regardless).
+
+Workspace Owners can toggle protection from the project toolbar (the 🔒 **Protect env**
+button) or via the API:
+
+```bash
+# PATCH /v1/projects/:id/envs/:env
+curl -X PATCH https://api.snapenv.io/v1/projects/$PROJECT/envs/prod \
+  -H "Authorization: Bearer $JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"protected": true}'
+```
+
+## Layer 3: Per-environment permission
+
+The finest level of control. Set per user per project per environment.
+
+| Value | Description |
+|---|---|
+| `none` | No access — can't see or pull this environment |
+| `read` | Can pull variables, can't modify |
+| `write` | Full read + write access |
+
+## Token permissions
+
+Access tokens have their own permission layer:
+- **Scope** (`read` / `write` / `deploy`) — controls pull vs push
+- **Env restriction** — limits which environments the token can access
+- **Project restriction** — optionally limits to a single project
+
+A token's effective access is the intersection of its own scope and the user permissions of the token's creator — a token can never exceed the creator's own access.
+
+## Enforcement
+
+All permission checks are enforced server-side. The dashboard only shows UI elements the user has access to, but the API will reject unauthorized requests regardless.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/team
+==============================================================================
+
+# Team & access
+
+SnapEnv has three layers of access control, all enforced server-side.
+
+## Workspace roles
+
+| Role | Description |
+|---|---|
+| **Owner** | Full access to everything — all projects, all environments, billing, team management |
+| **Member** | Access determined by project roles below |
+
+Owners bypass all project-level checks. Members only see and access projects they've been explicitly added to.
+
+## Project roles
+
+| Role | Default prod | Default staging/dev |
+|---|---|---|
+| **Admin** | write | write |
+| **Developer** | read | write |
+| **Read-only** | read | read |
+
+Assign a project role from the project's **Settings → Team** tab. You can also override per-environment permissions individually.
+
+## Per-environment permissions
+
+The finest level of control. Three values:
+
+- `none` — no access (can't see the environment at all)
+- `read` — can pull variables, can't modify
+- `write` — full read + write access
+
+## Inviting members
+
+**Workspace → Team → Invite**. Enter an email address and choose a workspace role.
+
+- If the email already has a SnapEnv account, they're added immediately and notified by email.
+- If not, an invite link is sent. The link expires in 7 days.
+
+After joining, add them to individual projects from each project's Settings tab.
+
+## Removing members
+
+**Workspace → Team → Remove**. Access is revoked immediately. Their project memberships are also removed.
+
+## Audit log
+
+Every team action is recorded: invites, role changes, additions, removals. See [Audit log](/guide/audit).
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/tokens
+==============================================================================
+
+# Access tokens
+
+Access tokens authenticate the CLI, Kubernetes operator, GitHub Actions, and any server-side automation against the SnapEnv API.
+
+## Create a token
+
+Dashboard → **Settings → Access tokens → New token**.
+
+### Options
+
+**Name** — how you'll recognize it in the list (e.g. `CI · GitHub Actions`, `k8s · production`).
+
+**Scope**
+
+| Scope | Pull | Push |
+|---|---|---|
+| `read` | ✓ | — |
+| `write` | ✓ | ✓ |
+| `deploy` | ✓ | — |
+
+**Environment access** — select which environments this token can read/write. Leave all selected for unrestricted access.
+
+**Project access** — leave blank for workspace-wide access, or pin to a single project. A project-scoped token returns `403` for any other project.
+
+**Expiry** — 30 days, 90 days, 1 year, or no expiry.
+
+## Token format
+
+```
+snp_live_xxxxxxxxxxxxxxxxxxxx
+```
+
+The plaintext is shown **once** at creation. Store it immediately in your secret manager, CI environment, or Kubernetes Secret. If you lose it, rotate the token.
+
+## Rotate
+
+Click the rotate icon next to a token. A new token is issued with the same name, scope, and permissions. The old token is revoked immediately — update any services using it before rotating.
+
+## Revoke
+
+Click **Revoke** to permanently invalidate a token. Revocation is immediate.
+
+## Usage
+
+```bash
+# CLI
+snapenv login --token snp_live_xxxxxxxxxxxx
+
+# Environment variable (no config file needed)
+export SNAPENV_TOKEN=snp_live_xxxxxxxxxxxx
+snapenv pull --env prod
+
+# Direct API call
+curl https://api.snapenv.io/v1/projects/PROJECT_ID/envs/prod/pull \
+  -H "Authorization: Bearer snp_live_xxxxxxxxxxxx"
+```
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/authentication
+==============================================================================
+
+# Authentication
+
+SnapEnv uses two credential types depending on the context.
+
+## JWT (web sessions)
+
+Issued by `POST /v1/auth/login`. Used by the dashboard only. Short-lived (7 days). Rejected by the variable pull endpoint — use an access token for automation.
+
+## Access tokens (`snp_live_`)
+
+Created in the dashboard under **Settings → Access tokens**. Used by the CLI, Kubernetes operator, GitHub Actions, and any server-side automation.
+
+```
+snp_live_xxxxxxxxxxxxxxxxxxxx
+```
+
+Tokens are stored as `bcrypt(sha256(plaintext))` — the plaintext is shown once at creation and never stored. If you lose it, rotate the token to get a new one.
+
+### Token scopes
+
+| Scope | Pull | Push | Notes |
+|---|---|---|---|
+| `read` | ✓ | — | Default. Use for most integrations. |
+| `write` | ✓ | ✓ | Required for `snapenv push` and bulk import from CI. |
+| `deploy` | ✓ | — | Same access as `read`. Signals a CI/deploy context. |
+
+### Environment restriction
+
+A token can be restricted to specific environments. A token scoped to `["production"]` will be rejected if used to pull `staging`.
+
+### Project restriction
+
+Optionally restrict a token to a single project. Workspace-wide by default (access to all projects).
+
+### Expiry
+
+Tokens can have an expiry date (30 days, 90 days, 1 year, or no expiry). Expired tokens return 401.
+
+## Using the token
+
+Pass it as a Bearer token:
+
+```bash
+curl https://api.snapenv.io/v1/projects/PROJECT_ID/envs/prod/pull \
+  -H "Authorization: Bearer snp_live_xxxxxxxxxxxx"
+```
+
+Or set the environment variable for the CLI:
+
+```bash
+export SNAPENV_TOKEN=snp_live_xxxxxxxxxxxx
+snapenv pull --env prod
+```
+
+## 2FA
+
+Enable TOTP two-factor authentication under **Settings → Security**. Once enabled, login requires a 6-digit code from your authenticator app. Backup codes are provided at enrollment.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/2fa
+==============================================================================
+
+# Two-factor authentication (2FA)
+
+SnapEnv supports TOTP-based 2FA (RFC 6238) compatible with any standard authenticator app.
+
+## Enable 2FA
+
+1. Go to **Settings → Security → Two-factor authentication**
+2. Scan the QR code with your authenticator app (Google Authenticator, Authy, 1Password, etc.)
+3. Enter the 6-digit code to confirm enrollment
+4. Save the **backup codes** — you'll need them if you lose your authenticator
+
+## Login flow with 2FA
+
+1. Enter email + password as usual
+2. Enter the 6-digit TOTP code from your authenticator
+3. Accepted within ±1 TOTP window (±30 seconds)
+
+## Backup codes
+
+8 single-use backup codes are generated at enrollment. Each can only be used once. Store them somewhere safe (password manager, printed, etc.).
+
+If you've used all backup codes and lost your authenticator device, contact support.
+
+## Disable 2FA
+
+**Settings → Security → Disable 2FA**. This requires your current TOTP code to confirm.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/audit
+==============================================================================
+
+# Audit log
+
+Every pull, push, change, and team action is recorded in an append-only audit log. Rows are never updated or deleted.
+
+## Viewing the audit log
+
+- **Per-project** — open a project → **Audit** tab
+- **Workspace-wide** — **Workspace → Audit**
+
+## What's logged
+
+| Action | Trigger |
+|---|---|
+| `var.create` | Variable created |
+| `var.update` | Variable value or type changed |
+| `var.delete` | Variable deleted |
+| `var.restore` | Variable restored from history |
+| `vars.bulk_upsert` | Bulk import or `snapenv push` |
+| `vars.bulk_delete` | Multi-select delete |
+| `vars.pull` | CLI or operator pull |
+| `token.create` | Access token created |
+| `token.revoke` | Access token revoked |
+| `token.rotate` | Access token rotated |
+| `member.invite` | User invited |
+| `member.remove` | Member removed |
+| `member.role_change` | Workspace role changed |
+| `access.grant` | User added to project |
+| `access.update` | Project role or env perms changed |
+| `access.revoke` | User removed from project |
+
+## Fields
+
+Each log entry includes:
+
+- **Action** — what happened
+- **Actor** — user name (or token name for CLI actions)
+- **Actor type** — `user` (web/JWT) or `token` (CLI/access token)
+- **Target key / env** — which variable or environment was affected
+- **Timestamp** — UTC
+
+## API access
+
+```bash
+# Project audit
+GET /v1/projects/:id/audit?limit=50&cursor=
+
+# Workspace audit
+GET /v1/workspace/audit?limit=50
+```
+
+Supports cursor-based pagination via the `nextCursor` field in the response.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/expiry
+==============================================================================
+
+# Variable expiry
+
+Set an expiry date on any variable to track when a credential needs to be rotated.
+
+## Setting an expiry
+
+Open a variable in the dashboard → click the expiry field → pick a date. Or via the API:
+
+```bash
+curl -X PUT https://api.snapenv.io/v1/projects/PROJECT_ID/envs/prod/vars/API_KEY \
+  -H "Authorization: Bearer snp_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"expiresAt": "2026-12-31T00:00:00Z"}'
+```
+
+## Email reminders
+
+When any variable in your workspace expires within **7 days**, SnapEnv sends an email to workspace Owners. Reminders are sent at most once per 24 hours per workspace.
+
+## Clearing an expiry
+
+In the dashboard, open the variable and clear the expiry date. Via the API:
+
+```json
+{ "clearExpiry": true }
+```
+
+## Viewing expiring variables
+
+In the dashboard, variables with approaching expiry dates are highlighted in the variable list. Filter by expiry using the expiry indicator in the variable row.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/webhooks
+==============================================================================
+
+# Webhooks
+
+Fire HTTP POST requests to any URL when variables change. Use them to trigger deployments, notify Slack, or invalidate caches.
+
+## Create a webhook
+
+**Workspace → Settings → Webhooks → Add webhook**.
+
+- **URL** — the endpoint to POST to
+- **Events** — which events trigger this webhook
+- **Secret** — auto-generated `whsec_…` signing secret (shown once)
+
+## Events
+
+| Event | When |
+|---|---|
+| `var.update` | Single variable updated |
+| `var.delete` | Single variable deleted |
+| `var.restore` | Variable restored from history |
+| `vars.bulk_upsert` | Bulk save (dashboard or `snapenv push`) |
+| `vars.bulk_delete` | Bulk delete |
+| `vars.pull` | Variables pulled via CLI or operator |
+
+## Payload
+
+```json
+{
+  "event": "vars.bulk_upsert",
+  "projectId": "uuid",
+  "env": "production",
+  "actor": "Dana Whitfield",
+  "keys": ["DATABASE_URL", "REDIS_URL"],
+  "created": ["REDIS_URL"],
+  "updated": ["DATABASE_URL"],
+  "timestamp": "2026-06-01T10:00:00Z"
+}
+```
+
+## Verifying signatures
+
+Every delivery includes an `X-SnapEnv-Signature` header:
+
+```
+X-SnapEnv-Signature: sha256=<hmac-hex>
+```
+
+Verify on receipt using `HMAC-SHA256(signingSecret, rawRequestBody)`:
+
+```python
+import hmac, hashlib
+
+def verify(secret: str, body: bytes, header: str) -> bool:
+    expected = "sha256=" + hmac.new(
+        secret.encode(), body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, header)
+```
+
+```typescript
+import { createHmac, timingSafeEqual } from 'crypto';
+
+function verify(secret: string, body: string, header: string): boolean {
+  const expected = 'sha256=' + createHmac('sha256', secret).update(body).digest('hex');
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(header));
+}
+```
+
+## Delivery log
+
+The dashboard shows the last delivery status (HTTP status code) and timestamp for each webhook. Deliveries are async with a 10-second timeout.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/cli
+==============================================================================
+
+# CLI Installation
+
+The `snapenv` binary is a single static executable. No runtime required.
+
+## Supported platforms
+
+| Platform | Architecture |
+|---|---|
+| macOS | amd64, arm64 (Apple Silicon) |
+| Linux | amd64, arm64 |
+
+## Install
+
+```bash
+curl -fsSL https://get.snapenv.io/install.sh | sh
+```
+
+The install script detects your platform and architecture, downloads the correct binary to `~/.local/bin/snapenv`, and makes it executable.
+
+### Manual download
+
+```bash
+# Linux amd64
+curl -fsSL https://get.snapenv.io/cli/latest/snapenv-linux-amd64 \
+  -o /usr/local/bin/snapenv && chmod +x /usr/local/bin/snapenv
+
+# Linux arm64
+curl -fsSL https://get.snapenv.io/cli/latest/snapenv-linux-arm64 \
+  -o /usr/local/bin/snapenv && chmod +x /usr/local/bin/snapenv
+```
+
+## Configuration
+
+Config is stored at `~/.config/snapenv/config.json` (chmod 600) and written by `snapenv login`.
+
+```json
+{
+  "apiUrl": "https://api.snapenv.io",
+  "token": "snp_live_...",
+  "project": "4fac4b02-...",
+  "env": "staging"
+}
+```
+
+### Environment variable overrides
+
+Environment variables always override the config file. Flags override environment variables.
+
+| Variable | Description |
+|---|---|
+| `SNAPENV_TOKEN` | Access token |
+| `SNAPENV_PROJECT` | Project UUID |
+| `SNAPENV_ENV` | Environment name |
+| `SNAPENV_OUTPUT` | Output file path (pull) |
+| `SNAPENV_API_URL` | API base URL |
+
+## Self-update
+
+```bash
+snapenv upgrade           # install latest version
+snapenv upgrade --check   # check without installing
+```
+
+## Commands
+
+| Command | Description |
+|---|---|
+| [`snapenv login`](/guide/cli#login) | Save credentials to config |
+| [`snapenv pull`](/guide/cli-pull) | Pull variables to a file or stdout |
+| [`snapenv push`](/guide/cli-push) | Push a local `.env` file to SnapEnv |
+| [`snapenv diff`](/guide/cli-diff) | Compare local file to remote |
+| [`snapenv projects`](/guide/cli-projects) | List all projects in the workspace |
+| `snapenv upgrade` | Self-update the binary |
+| `snapenv version` | Print version |
+
+## login
+
+```bash
+snapenv login --token snp_live_...
+snapenv login --token snp_live_... --api-url https://api.yourcompany.com
+```
+
+Writes credentials to `~/.config/snapenv/config.json`.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/cli-pull
+==============================================================================
+
+# snapenv pull
+
+Fetches variables for a project + environment and writes them to a file.
+
+## Usage
+
+```bash
+snapenv pull --env prod
+snapenv pull --env prod --file /run/secrets/.env
+snapenv pull --env prod --stdout
+snapenv pull --env prod --format k8s | kubectl apply -f -
+```
+
+## Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--env` | `$SNAPENV_ENV` | Environment name |
+| `--project` | `$SNAPENV_PROJECT` | Project UUID |
+| `--file`, `--output` | `.env` | Output file path |
+| `--stdout` | — | Print to stdout, skip file write |
+| `--format` | `dotenv` | Output format: `dotenv` or `k8s` |
+| `--no-metadata` | — | Suppress the injected `SNAPENV_*` context variables |
+
+## Output formats
+
+### dotenv (default)
+
+```
+DATABASE_URL=postgres://...
+REDIS_URL=redis://...
+JWT_SECRET=abc123
+```
+
+Written with mode `0600`. Existing file is overwritten.
+
+### k8s
+
+Outputs a Kubernetes `v1/Secret` YAML with base64-encoded `data`:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: snapenv-myproject-prod
+type: Opaque
+data:
+  DATABASE_URL: cG9zdGdyZXM6Ly8...
+  REDIS_URL: cmVkaXM6Ly8...
+```
+
+Pipe directly to `kubectl apply`:
+
+```bash
+snapenv pull --env prod --format k8s | kubectl apply -f -
+```
+
+## Context variables
+
+Every pull injects a small set of reserved variables so your app, logs, or
+deploy scripts can introspect which project and environment they were pulled
+from — similar to Doppler's `DOPPLER_*` vars:
+
+```
+SNAPENV_PROJECT="9f8c...uuid"
+SNAPENV_ENV="prod"
+SNAPENV_PROJECT_NAME="Core API"
+```
+
+These are **synthetic** — they are never stored as real variables, and a
+variable you define yourself with the same name always takes precedence.
+
+Multi-line values (e.g. PEM keys) are emitted double-quoted with escaped
+newlines, so they survive standard dotenv parsing and load as a single value.
+
+Disable the context variables per call with `--no-metadata`:
+
+```bash
+snapenv pull --env prod --no-metadata
+```
+
+`snapenv diff` suppresses them automatically so they never appear as
+remote-only additions.
+
+## GitHub Actions integration
+
+When `GITHUB_ACTIONS=true`, `snapenv pull` automatically appends all variables to `$GITHUB_ENV`, making them available to subsequent steps:
+
+```yaml
+- name: Pull secrets
+  env:
+    SNAPENV_TOKEN: ${{ secrets.SNAPENV_TOKEN }}
+    SNAPENV_PROJECT: ${{ vars.SNAPENV_PROJECT }}
+  run: snapenv pull --env prod
+
+- name: Use secrets
+  run: echo $DATABASE_URL   # available from previous step
+```
+
+## Non-interactive / auto mode
+
+When `SNAPENV_TOKEN`, `SNAPENV_PROJECT`, and `SNAPENV_ENV` are all set, `snapenv pull` runs non-interactively — no config file required. Useful in CI and init containers.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | Any error (auth, network, missing flag) |
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/cli-push
+==============================================================================
+
+# snapenv push
+
+Reads a local `.env` file and upserts variables to SnapEnv. Additive — keys absent from the file are left unchanged remotely.
+
+## Usage
+
+```bash
+snapenv push --env dev
+snapenv push --env staging --file .env.staging
+snapenv push --env prod --dry-run
+```
+
+## Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--env` | `$SNAPENV_ENV` | Target environment |
+| `--project` | `$SNAPENV_PROJECT` | Project UUID |
+| `--file` | `.env` | Source file |
+| `--dry-run` | — | Print keys that would be sent, no API call |
+
+## Requires write scope
+
+The access token must have `write` scope. A `read`-scoped token will be rejected with `FORBIDDEN`.
+
+## Output
+
+```
+✓ 3 created, 2 updated
+```
+
+## Notes
+
+- Keys not in the local file are **not** deleted remotely
+- To delete a key, use the dashboard or `DELETE /v1/projects/:id/envs/:env/vars/:key`
+- Values are encrypted server-side before storage — the CLI sends plaintext over HTTPS
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/cli-diff
+==============================================================================
+
+# snapenv diff
+
+Compares a local `.env` file to remote variables. Useful as a CI gate or before pushing.
+
+## Usage
+
+```bash
+snapenv diff --env prod
+snapenv diff --env prod --file .env.prod
+snapenv diff --env prod --keys DATABASE_URL,REDIS_URL
+```
+
+## Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--env` | `$SNAPENV_ENV` | Environment to compare against |
+| `--project` | `$SNAPENV_PROJECT` | Project UUID |
+| `--file` | `.env` | Local file to compare |
+| `--keys` | — | Comma-separated key filter |
+
+## Output
+
+Color-coded diff:
+
+```
+~ DATABASE_URL   (value differs)
++ FEATURE_FLAG   (remote only — not in local file)
+- LEGACY_KEY     (local only — not in remote)
+```
+
+| Symbol | Meaning |
+|---|---|
+| `~` yellow | Key exists in both, values differ |
+| `+` green | Remote only (missing locally) |
+| `-` red | Local only (missing remotely) |
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | No differences |
+| `1` | Differences found (or error) |
+
+Exit code `1` on differences makes `snapenv diff` useful as a CI gate to detect config drift:
+
+```yaml
+- name: Check for config drift
+  run: snapenv diff --env prod
+  # Fails the step if local .env doesn't match remote
+```
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/cli-projects
+==============================================================================
+
+# snapenv projects
+
+Lists all projects in the authenticated workspace.
+
+## Usage
+
+```bash
+snapenv projects
+```
+
+## Output
+
+```
+ID                                    NAME           ENVS
+─────────────────────────────────────────────────────────────────
+4fac4b02-...                          Northwind API  dev, staging, prod
+a1b2c3d4-...                          Frontend       staging, prod
+```
+
+Use the `ID` column value as `$SNAPENV_PROJECT` or pass it with `--project` to other commands.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/overview
+==============================================================================
+
+# Integrations overview
+
+Every integration authenticates with an [access token](/guide/tokens). Create one in the dashboard under **Settings → Access tokens**.
+
+## Available integrations
+
+| Integration | Best for |
+|---|---|
+| [CLI](/guide/cli) | Servers, local dev, scripts |
+| [Kubernetes Operator](/integrations/kubernetes) | Auto-sync into native K8s Secrets |
+| [GitHub Actions](/integrations/github-actions) | CI/CD pipelines |
+| [Docker / Compose](/integrations/docker) | Container startup |
+| [Init containers](/integrations/init-container) | Kubernetes without the operator |
+
+## Common pattern
+
+All integrations follow the same pattern:
+
+1. Create an access token in the dashboard
+2. Store the token as a secret in your target system (GitHub Secret, K8s Secret, etc.)
+3. Use `snapenv pull` (CLI, Docker) or a native integration (K8s Operator) to fetch variables at runtime
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/kubernetes
+==============================================================================
+
+# Kubernetes Operator
+
+The SnapEnv operator automatically syncs variables into native Kubernetes Secrets. No init containers, no custom scripts — just a CRD and a controller.
+
+## Install
+
+```bash
+kubectl apply -f https://get.snapenv.io/operator/install.yaml
+```
+
+Installs the CRD, RBAC, and operator Deployment into the `snapenv-operator` namespace.
+
+## Quick start
+
+**1. Create a token Secret:**
+
+```bash
+kubectl create secret generic snapenv-token \
+  --from-literal=token=snp_live_xxxxxxxxxxxx
+```
+
+**2. Create a SnapEnvSecret resource:**
+
+```yaml
+apiVersion: snapenv.io/v1alpha1
+kind: SnapEnvSecret
+metadata:
+  name: api-prod
+  namespace: default
+spec:
+  tokenSecret: snapenv-token   # K8s Secret in same namespace
+  project: <your-project-uuid>
+  env: prod
+  target: api-prod-env         # name of the K8s Secret to create
+  syncInterval: 30m            # fallback poll interval (default 30m)
+```
+
+```bash
+kubectl apply -f snapenvsecret.yaml
+kubectl get ses api-prod   # watch the Ready column
+```
+
+**3. Mount in your Deployment:**
+
+```yaml
+envFrom:
+  - secretRef:
+      name: api-prod-env
+```
+
+## Auto-restart deployments on change
+
+Add the `snapenv.io/sync-secret` annotation to any Deployment or StatefulSet. When the operator detects that the variable content has changed (via content hash), it automatically triggers a rolling restart — no manual `kubectl rollout restart` needed.
+
+The annotation value must match the `spec.target` name in your `SnapEnvSecret`.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  annotations:
+    snapenv.io/sync-secret: "api-prod-env"   # matches spec.target above
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          envFrom:
+            - secretRef:
+                name: api-prod-env
+```
+
+The operator computes a SHA-256 hash of all variable values after every sync. If the hash matches the previous sync, no restart is triggered. Both `Deployment` and `StatefulSet` are supported.
+
+## Smart polling — only syncs when something changed
+
+The operator uses HTTP conditional requests so polls are nearly free when nothing has changed.
+
+**How it works:**
+
+1. On the first pull, the API returns the dotenv body plus an `ETag` header — a short hash of the variable content.
+2. The operator stores that hash in `status.dataHash`.
+3. On every subsequent poll, the operator sends `If-None-Match: "<hash>"` with the request.
+4. If nothing changed, the API returns **`304 Not Modified`** with no body. The operator skips processing, skips the audit log, and re-schedules — the round trip costs almost nothing.
+5. Only when variables actually change does the API return `200` with the new content, and only then does the operator update the Secret (and restart linked Deployments).
+
+This means you can poll frequently without hammering the API or cluttering the audit log. The default `syncInterval` of `30m` is conservative — feel free to lower it:
+
+```yaml
+spec:
+  syncInterval: 5m   # cheap — only does real work when variables change
+```
+
+## CRD reference
+
+| Field | Required | Description |
+|---|---|---|
+| `tokenSecret` | yes | K8s Secret name containing the `snp_live_` token |
+| `tokenKey` | no | Data key inside `tokenSecret` (default: `token`) |
+| `project` | yes | SnapEnv project UUID |
+| `env` | yes | SnapEnv environment name |
+| `target` | yes | Name of the K8s Secret to create/update |
+| `apiUrl` | no | Override API URL (default: `https://api.snapenv.io`) |
+| `syncInterval` | no | Fallback poll interval, min `1m` (default: `30m`) |
+
+## Status fields
+
+```bash
+kubectl describe ses api-prod
+```
+
+| Field | Description |
+|---|---|
+| `ready` | `true` when last sync succeeded |
+| `lastSyncTime` | Time of last successful sync |
+| `lastSyncError` | Error message from last failed sync |
+| `variableCount` | Number of variables written |
+| `dataHash` | Content hash of the last synced variables — sent as `If-None-Match` on the next poll to get a cheap 304 when nothing changed |
+
+## Dashboard connection status
+
+When the operator syncs, it sends `X-SnapEnv-Client: operator` with each pull request. The dashboard's **Integrations** page shows **Connected · last sync X ago** based on this.
+
+## Troubleshooting
+
+```bash
+kubectl logs -n snapenv-operator deploy/snapenv-operator -f
+kubectl get ses -A
+kubectl describe ses <name>
+```
+
+| Error | Cause |
+|---|---|
+| `tokenSecret not found` | The named K8s Secret doesn't exist in the namespace |
+| `HTTP 401` | Token is invalid or revoked |
+| `HTTP 403` | Token lacks access to the project or environment |
+| `HTTP 404` | Wrong project UUID or environment name |
+
+## Update the operator
+
+```bash
+kubectl apply -f https://get.snapenv.io/operator/install.yaml
+kubectl rollout restart deploy/snapenv-operator -n snapenv-operator
+```
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/github-actions
+==============================================================================
+
+# GitHub Actions
+
+Inject SnapEnv secrets into any CI workflow step — no third-party action required.
+
+## Setup
+
+**1. Store your token as a GitHub secret:**
+
+Go to your repo → **Settings → Secrets and variables → Actions → New repository secret**. Name it `SNAPENV_TOKEN`.
+
+Optionally store your project ID as a variable: **Variables → New variable**, name it `SNAPENV_PROJECT`.
+
+**2. Add a workflow step:**
+
+```yaml
+- name: Pull secrets
+  env:
+    SNAPENV_TOKEN: ${{ secrets.SNAPENV_TOKEN }}
+    SNAPENV_PROJECT: ${{ vars.SNAPENV_PROJECT }}
+    SNAPENV_ENV: prod
+  run: |
+    curl -fsSL https://get.snapenv.io/install.sh | sh
+    snapenv pull --env prod
+    # Variables are now in .env
+```
+
+## Export to GITHUB_ENV
+
+When `GITHUB_ACTIONS=true`, `snapenv pull` automatically appends all variables to `$GITHUB_ENV` — making them available to all subsequent steps without sourcing a file:
+
+```yaml
+- name: Pull secrets to environment
+  env:
+    SNAPENV_TOKEN: ${{ secrets.SNAPENV_TOKEN }}
+    SNAPENV_PROJECT: ${{ vars.SNAPENV_PROJECT }}
+    SNAPENV_ENV: prod
+  run: snapenv pull --env prod
+
+- name: Build
+  run: |
+    echo $DATABASE_URL   # available — SnapEnv wrote it to GITHUB_ENV
+    npm run build
+```
+
+## Cache the CLI binary
+
+To avoid downloading the CLI on every run, cache it:
+
+```yaml
+- name: Cache snapenv
+  uses: actions/cache@v4
+  with:
+    path: ~/.local/bin/snapenv
+    key: snapenv-${{ runner.os }}
+
+- name: Install snapenv
+  run: |
+    if ! command -v snapenv &> /dev/null; then
+      curl -fsSL https://get.snapenv.io/install.sh | sh
+    fi
+```
+
+## Use a project-scoped token
+
+Create an access token restricted to your specific project and the `production` environment only — this limits blast radius if the secret is ever exposed.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/docker
+==============================================================================
+
+# Docker / Compose
+
+Resolve secrets at container start — not at build time. Secrets never get baked into your image layers.
+
+## Multi-stage Dockerfile
+
+Copy the `snapenv` binary from the official image and pull at runtime:
+
+```dockerfile
+FROM ghcr.io/snapenv-io/cli:latest AS snapenv
+
+FROM node:20-alpine
+COPY --from=snapenv /usr/local/bin/snapenv /usr/local/bin/snapenv
+WORKDIR /app
+COPY . .
+RUN npm ci
+
+# Pull secrets at container start, then launch the app
+CMD snapenv pull --env prod && node dist/server.js
+```
+
+Set `SNAPENV_TOKEN` and `SNAPENV_PROJECT` as environment variables when running the container:
+
+```bash
+docker run \
+  -e SNAPENV_TOKEN=snp_live_... \
+  -e SNAPENV_PROJECT=4fac4b02-... \
+  my-app:latest
+```
+
+## Docker Compose with env_file
+
+Generate `.env` before `compose up`:
+
+```yaml
+# compose.yml
+services:
+  app:
+    build: .
+    env_file: .env
+```
+
+```bash
+# deploy script
+snapenv pull --env prod && docker compose up -d
+```
+
+## Notes
+
+- Never pass secrets as build arguments (`ARG`) — they appear in `docker history`
+- Use `--stdout` to pipe directly without writing a file: `snapenv pull --env prod --stdout > .env`
+- For Kubernetes, prefer the [operator](/integrations/kubernetes) over Docker-style patterns
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/init-container
+==============================================================================
+
+# Init containers (Kubernetes)
+
+Use an init container to bootstrap secrets into your pod before the main container starts — without installing the Kubernetes operator.
+
+::: tip Prefer the operator
+For production Kubernetes setups the [operator](/integrations/kubernetes) is easier to manage — it handles re-sync automatically and doesn't require changing every Deployment. Use init containers when you can't install cluster-wide CRDs.
+:::
+
+## How it works
+
+1. The init container runs `snapenv pull` and writes the output to a shared `emptyDir` volume
+2. The main container reads the file at startup
+3. Secrets are in memory only — never in the image or persistent storage
+
+## Pod manifest
+
+```yaml
+initContainers:
+  - name: snapenv-init
+    image: ghcr.io/snapenv-io/cli:latest
+    command: ["snapenv", "pull", "--env", "prod", "--output", "/secrets/.env"]
+    env:
+      - name: SNAPENV_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: snapenv-token
+            key: token
+      - name: SNAPENV_PROJECT
+        value: "<your-project-uuid>"
+    volumeMounts:
+      - name: secrets
+        mountPath: /secrets
+
+containers:
+  - name: app
+    image: your-app:latest
+    volumeMounts:
+      - name: secrets
+        mountPath: /secrets
+        readOnly: true
+
+volumes:
+  - name: secrets
+    emptyDir:
+      medium: Memory   # tmpfs — never written to disk
+```
+
+## Create the token Secret
+
+```bash
+kubectl create secret generic snapenv-token \
+  --from-literal=token=snp_live_xxxxxxxxxxxx
+```
+
+## Source the file in your app
+
+```bash
+# In your entrypoint or CMD
+source /secrets/.env && exec node server.js
+```
+
+Or load it programmatically (Node.js example):
+
+```js
+import { config } from 'dotenv';
+config({ path: '/secrets/.env' });
+```
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/api/overview
+==============================================================================
+
+# API Overview
+
+**Base URL:** `https://api.snapenv.io`  
+All endpoints are under the `/v1/` prefix.
+
+## Authentication
+
+```
+Authorization: Bearer <credential>
+```
+
+Two credential types:
+
+| Type | Format | Use case |
+|---|---|---|
+| **JWT** | `eyJ…` | Dashboard sessions only |
+| **Access token** | `snp_live_…` | CLI, CI/CD, server scripts, operator |
+
+Variable endpoints (`/projects/*`) accept both. Account and workspace endpoints (`/me/*`, `/workspace/*`) require a JWT.
+
+## Error format
+
+All non-2xx responses:
+
+```json
+{
+  "error": {
+    "code": "SNAKE_CASE",
+    "message": "Human readable description",
+    "field": "fieldName"
+  }
+}
+```
+
+Common codes:
+
+| HTTP | Code | Meaning |
+|---|---|---|
+| 400 | `VALIDATION` | Missing or invalid field |
+| 401 | `UNAUTHORIZED` | Missing, expired, or invalid credential |
+| 403 | `FORBIDDEN` | Insufficient role or permission |
+| 404 | `NOT_FOUND` | Resource does not exist |
+| 409 | `CONFLICT` | Duplicate (e.g. email already registered) |
+| 429 | `RATE_LIMIT` | Too many requests |
+| 500 | `SERVER` | Internal error |
+
+## Rate limits
+
+| Endpoint | Limit |
+|---|---|
+| `POST /v1/auth/login` | 10 req/min per IP |
+| `POST /v1/auth/resend-verification` | 1 req/min per user |
+| All other endpoints | No hard limit |
+
+## Sections
+
+- [Authentication](/api/authentication) — login, signup, 2FA, session
+- [Projects](/api/projects) — CRUD, environments, diff
+- [Variables](/api/variables) — list, create, update, history, pull
+- [Tokens](/api/tokens) — create, list, rotate, revoke
+- [Workspace](/api/workspace) — settings, team, billing, webhooks
+- [Webhooks](/api/webhooks) — create, list, payload format
+- [Audit](/api/audit) — log endpoints
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/api/authentication
+==============================================================================
+
+# Authentication API
+
+## POST /v1/auth/signup
+
+Create an account and workspace.
+
+```json
+// request
+{ "name": "Dana Whitfield", "email": "dana@acme.com", "password": "s3cr3t" }
+
+// response 201
+{ "token": "<jwt>", "user": { "id": "uuid", "name": "Dana Whitfield", "email": "dana@acme.com" } }
+```
+
+## POST /v1/auth/login
+
+```json
+// request
+{ "email": "dana@acme.com", "password": "s3cr3t" }
+
+// response — 2FA not enabled
+{ "token": "<jwt>", "user": { ... } }
+
+// response — 2FA enabled
+{ "mfaRequired": true, "mfaToken": "<short-lived-jwt>" }
+```
+
+When `mfaRequired: true`, prompt for TOTP code and call `POST /v1/auth/verify-mfa`. The `mfaToken` expires in 5 minutes.
+
+## POST /v1/auth/verify-mfa
+
+```json
+// request
+{ "mfaToken": "<mfa-jwt>", "code": "123456" }
+
+// response 200
+{ "token": "<full-jwt>", "user": { ... } }
+```
+
+Accepts ±1 TOTP window (90 seconds total) and single-use backup codes.
+
+## GET /v1/auth/session
+
+Validate the stored JWT and return the current user. Called on every page load.
+
+```json
+{
+  "user": {
+    "id": "uuid",
+    "name": "Dana Whitfield",
+    "email": "dana@acme.com",
+    "workspaceId": "uuid",
+    "workspaceName": "Acme Corp",
+    "wsRole": "Owner",
+    "emailVerifiedAt": "2025-01-01T00:00:00Z"
+  }
+}
+```
+
+Returns 401 if the token is invalid, expired, or MFA-pending.
+
+## POST /v1/auth/accept-invite
+
+Accept a workspace invite. `token` is from the invite link.
+
+```json
+// request
+{ "token": "a3f9b2..." }
+
+// response 200
+{ "token": "<jwt>", "workspaceId": "uuid", "workspaceName": "Acme Corp", "wsRole": "Member" }
+```
+
+## POST /v1/auth/switch-workspace
+
+Issue a new JWT scoped to a different workspace the caller belongs to.
+
+```json
+// request
+{ "workspaceId": "uuid" }
+// response 200
+{ "token": "<jwt>", "workspaceId": "uuid", "workspaceName": "Acme Corp" }
+```
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/api/projects
+==============================================================================
+
+# Projects API
+
+## GET /v1/projects
+
+```json
+{
+  "projects": [
+    { "id": "uuid", "name": "Backend API", "desc": "Core gateway", "color": "#3b82f6", "envs": ["dev","staging","prod"] }
+  ]
+}
+```
+
+## POST /v1/projects
+
+```json
+// request
+{ "name": "Backend API", "desc": "optional", "color": "#3b82f6", "envs": ["staging","prod"] }
+// response 201 — same shape as list item
+```
+
+## GET /v1/projects/:id
+
+Same shape as a list item.
+
+## PATCH /v1/projects/:id
+
+```json
+// request — all optional
+{ "name": "New Name", "desc": "Updated", "color": "#8b5cf6" }
+// response 200 — same shape
+```
+
+## DELETE /v1/projects/:id
+
+Permanently deletes the project and all its variables, history, and audit logs. Owner only. Returns 204.
+
+## POST /v1/projects/:id/envs
+
+```json
+// request
+{ "name": "canary" }
+// response 201 — updated project with new env in envs array
+```
+
+## DELETE /v1/projects/:id/envs/:env
+
+Deletes the environment and all its variables. Returns 204.
+
+## GET /v1/projects/:id/diff
+
+Compare variables between two environments.
+
+```
+?env=prod&env=staging
+```
+
+```json
+{
+  "onlyInA": ["FEATURE_FLAG"],
+  "onlyInB": ["LEGACY_KEY"],
+  "different": ["DATABASE_URL", "REDIS_URL"]
+}
+```
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/api/variables
+==============================================================================
+
+# Variables API
+
+## GET /v1/projects/:id/envs/:env/vars
+
+List variables. Values are masked by default.
+
+```
+?reveal=true   — return plaintext values (requires write permission)
+```
+
+```json
+{
+  "vars": [
+    { "key": "DATABASE_URL", "value": "***", "type": "secret", "updatedAt": "...", "expiresAt": null }
+  ]
+}
+```
+
+## POST /v1/projects/:id/vars
+
+Bulk upsert across one or more environments.
+
+```json
+// request
+{
+  "envs": ["production", "staging"],
+  "items": [{ "key": "FOO", "value": "bar", "type": "secret" }]
+}
+
+// response 200
+{ "created": ["FOO"], "updated": ["DATABASE_URL"] }
+```
+
+## PUT /v1/projects/:id/envs/:env/vars/:key
+
+Update a single variable.
+
+```json
+// request — all fields optional
+{ "value": "new-value", "type": "plain", "expiresAt": "2025-12-31T00:00:00Z", "clearExpiry": false }
+
+// response 200
+{ "key": "FOO", "value": "new-value", "type": "plain", "updatedAt": "...", "expiresAt": "..." }
+```
+
+Set `clearExpiry: true` to remove an existing expiry date.
+
+## DELETE /v1/projects/:id/envs/:env/vars/:key
+
+Returns 204.
+
+## POST /v1/projects/:id/envs/:env/vars:bulkDelete
+
+```json
+// request
+{ "keys": ["FOO", "BAR"] }
+// response 200
+{ "deleted": 2 }
+```
+
+## GET /v1/projects/:id/envs/:env/vars/:key/history
+
+```json
+{
+  "history": [
+    { "id": 42, "value": "***", "type": "secret", "action": "updated", "changedBy": "uuid", "changedAt": "..." }
+  ]
+}
+```
+
+Append `?reveal=true` for plaintext.
+
+## POST /v1/projects/:id/envs/:env/vars/:key/restore
+
+```json
+// request
+{ "versionId": 42 }
+// response 200 — the restored variable
+{ "key": "FOO", "value": "***", "type": "secret", "updatedAt": "..." }
+```
+
+## GET /v1/projects/:id/envs/:env/pull
+
+The CLI and Kubernetes operator endpoint. Returns variables as dotenv text.
+
+```
+Authorization: Bearer snp_live_...
+X-SnapEnv-Client: operator   (optional — used by k8s operator to track sync time)
+```
+
+Response: `text/plain` dotenv format.
+
+The dotenv body also appends synthetic **context variables** —
+`SNAPENV_PROJECT`, `SNAPENV_ENV`, `SNAPENV_PROJECT_NAME` — so consumers can
+introspect their source. They are never stored, and a user-defined variable of
+the same name wins. Values are static, so the response `ETag` (used by the k8s
+operator for `304` conditional sync) stays stable. Suppress with
+`?metadata=false`.
+
+Multi-line values are emitted double-quoted with escaped newlines so they
+survive standard dotenv parsing.
+
+## GET /v1/projects/:id/envs/:env/export
+
+Download all variables as a file.
+
+```
+?format=dotenv   (default) or k8s
+?reveal=true     include plaintext values (requires write perm)
+?metadata=false  omit the injected SNAPENV_* context variables (default: on)
+```
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/api/tokens
+==============================================================================
+
+# Tokens API
+
+## GET /v1/tokens
+
+```json
+{
+  "tokens": [
+    {
+      "id": "uuid", "name": "CI Deploy", "tokenPrefix": "snp_live_XX",
+      "scope": "read", "envs": ["production"], "projectId": null,
+      "lastUsedAt": null, "expiresAt": null, "createdAt": "..."
+    }
+  ]
+}
+```
+
+## POST /v1/tokens
+
+```json
+// request
+{
+  "name": "CI Deploy",
+  "scope": "read",
+  "envs": ["production"],
+  "projectId": null,
+  "expiresIn": 90
+}
+
+// response 201
+{
+  "id": "uuid",
+  "token": "snp_live_XXXXXXXXXXXX",
+  "name": "CI Deploy", "scope": "read",
+  "envs": ["production"], "projectId": null,
+  "expiresAt": "2026-09-07T00:00:00Z"
+}
+```
+
+`token` is the plaintext — shown once only. `projectId: null` means workspace-wide.
+
+## POST /v1/tokens/:id/rotate
+
+Revoke and reissue with the same settings. Returns the new plaintext token.
+
+```json
+// response 200
+{ "id": "uuid", "token": "snp_live_YYYYYYYY", "name": "CI Deploy", "scope": "read", "envs": ["production"] }
+```
+
+## DELETE /v1/tokens/:id
+
+Revoke immediately. Returns 204.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/api/workspace
+==============================================================================
+
+# Workspace API
+
+## GET /v1/workspace
+
+```json
+{ "id": "uuid", "name": "Acme Corp", "slug": "acme-corp" }
+```
+
+## PATCH /v1/workspace
+
+Rename. Owner only.
+
+```json
+{ "name": "Acme Corp Inc." }
+```
+
+## GET /v1/workspace/billing
+
+```json
+{
+  "plan": "free",
+  "limits": { "projects": 3, "members": 3, "envsPerProject": 3 },
+  "usage":  { "projects": 2, "members": 1 }
+}
+```
+
+`-1` in limits means unlimited.
+
+## GET /v1/workspace/connections
+
+Integration connection status.
+
+```json
+{
+  "operator": {
+    "connected": true,
+    "lastSync": "2026-06-10T14:30:00Z"
+  }
+}
+```
+
+## GET /v1/workspace/stats
+
+```json
+{ "memberCount": 4, "projectCount": 3, "variableCount": 142, "tokenCount": 2 }
+```
+
+## GET /v1/workspace/members
+
+```json
+{
+  "members": [
+    { "id": "uuid", "name": "Dana Whitfield", "email": "dana@acme.com", "wsRole": "Owner", "joinedAt": "..." }
+  ]
+}
+```
+
+## POST /v1/workspace/invites
+
+```json
+// request
+{ "email": "new@acme.com", "wsRole": "Member" }
+
+// response 200 — existing user
+{ "userId": "uuid", "name": "...", "wsRole": "Member" }
+
+// response 202 — new user, invite sent
+{ "invited": true, "email": "new@acme.com" }
+```
+
+## PATCH /v1/workspace/members/:userId
+
+```json
+{ "wsRole": "Owner" }
+```
+
+## DELETE /v1/workspace/members/:userId
+
+Returns 204. Owners can't remove themselves.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/api/audit
+==============================================================================
+
+# Audit API
+
+## GET /v1/projects/:id/audit
+
+```
+?limit=50&cursor=<nextCursor>
+```
+
+```json
+{
+  "logs": [
+    {
+      "id": 42, "action": "var.update",
+      "targetKey": "DATABASE_URL", "targetEnv": "production",
+      "actorId": "uuid", "actorType": "user",
+      "detail": null, "createdAt": "..."
+    }
+  ],
+  "nextCursor": "42"
+}
+```
+
+## GET /v1/workspace/audit
+
+```
+?limit=50
+```
+
+Same shape as project audit. Spans all projects in the workspace.
+
+## Actor types
+
+| `actorType` | Meaning |
+|---|---|
+| `user` | Action taken via the dashboard (JWT) |
+| `token` | Action taken via CLI or API with an access token |
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/api/webhooks
+==============================================================================
+
+# Webhooks API
+
+See [Webhooks guide](/guide/webhooks) for the payload format and signature verification.
+
+## GET /v1/workspace/webhooks
+
+```json
+{
+  "webhooks": [
+    {
+      "id": "uuid", "name": "Deploy trigger",
+      "url": "https://hooks.example.com/deploy",
+      "events": ["vars.bulk_upsert", "var.update"],
+      "active": true, "lastFiredAt": "...", "lastStatus": 200, "createdAt": "..."
+    }
+  ]
+}
+```
+
+## POST /v1/workspace/webhooks
+
+Owner only.
+
+```json
+// request
+{ "name": "Deploy trigger", "url": "https://hooks.example.com/deploy", "events": ["vars.bulk_upsert"] }
+
+// response 201
+{
+  "id": "uuid", "name": "Deploy trigger",
+  "url": "https://hooks.example.com/deploy",
+  "events": ["vars.bulk_upsert"],
+  "active": true,
+  "secret": "whsec_..."
+}
+```
+
+`secret` is shown once — use it to verify incoming payloads.
+
+## PATCH /v1/workspace/webhooks/:id
+
+Owner only. All fields optional.
+
+```json
+{ "name": "New name", "url": "https://...", "events": [...], "active": false }
+```
+
+## DELETE /v1/workspace/webhooks/:id
+
+Owner only. Returns 204.
