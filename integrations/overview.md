@@ -11,6 +11,11 @@ Every integration authenticates with an [access token](/guide/tokens). Create on
 | [GitHub Actions](/integrations/github-actions) | CI/CD pipelines |
 | [Docker / Compose](/integrations/docker) | Container startup |
 | [Init containers](/integrations/init-container) | Kubernetes without the operator |
+| [Vercel](/integrations/vercel) | Build-time secrets for serverless/static deploys |
+| [Railway](/integrations/railway) | Long-running services, via `snapenv run` |
+| [Render](/integrations/render) | Long-running services, via `snapenv run` |
+| [Dokploy](/integrations/dokploy) | Self-hosted PaaS, via `snapenv run` |
+| [Coolify](/integrations/coolify) | Self-hosted PaaS, via `snapenv run` |
 
 ## Common pattern
 

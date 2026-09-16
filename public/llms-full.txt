@@ -766,6 +766,7 @@ snapenv upgrade --check   # check without installing
 |---|---|
 | [`snapenv login`](/guide/cli#login) | Save credentials to config |
 | [`snapenv pull`](/guide/cli-pull) | Pull variables to a file or stdout |
+| [`snapenv run`](/guide/cli-run) | Run a command with variables injected — no `.env` file, scrubbed output |
 | [`snapenv push`](/guide/cli-push) | Push a local `.env` file to SnapEnv |
 | [`snapenv diff`](/guide/cli-diff) | Compare local file to remote |
 | [`snapenv projects`](/guide/cli-projects) | List all projects in the workspace |
@@ -1039,6 +1040,11 @@ Every integration authenticates with an [access token](/guide/tokens). Create on
 | [GitHub Actions](/integrations/github-actions) | CI/CD pipelines |
 | [Docker / Compose](/integrations/docker) | Container startup |
 | [Init containers](/integrations/init-container) | Kubernetes without the operator |
+| [Vercel](/integrations/vercel) | Build-time secrets for serverless/static deploys |
+| [Railway](/integrations/railway) | Long-running services, via `snapenv run` |
+| [Render](/integrations/render) | Long-running services, via `snapenv run` |
+| [Dokploy](/integrations/dokploy) | Self-hosted PaaS, via `snapenv run` |
+| [Coolify](/integrations/coolify) | Self-hosted PaaS, via `snapenv run` |
 
 ## Common pattern
 
@@ -1985,3 +1991,302 @@ Owner only. All fields optional.
 ## DELETE /v1/workspace/webhooks/:id
 
 Owner only. Returns 204.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/cli-run
+==============================================================================
+
+# snapenv run
+
+Runs a command with variables injected — never written to a `.env` file, and never appearing in anything you (or an AI coding agent driving the CLI on your behalf) actually wrote.
+
+## Usage
+
+```bash
+snapenv run --env prod --only DATABASE_URL -- node server.js
+snapenv run --env prod --all -- npm start
+snapenv run --env prod --only API_TOKEN -- curl -H "Authorization: Bearer {{API_TOKEN}}" https://api.example.com
+snapenv run --env staging --all --except DATABASE_URL -- ./migrate.sh
+```
+
+The `--` separator is required — everything after it is the command to run, untouched by `snapenv run`'s own flag parsing.
+
+## Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--env` | `$SNAPENV_ENV` | Environment to pull from |
+| `--project` | `$SNAPENV_PROJECT` | Project UUID |
+| `--only` | — | Comma-separated keys to expose (mutually exclusive with `--all`) |
+| `--all` | — | Expose every variable in the environment |
+| `--except` | — | Comma-separated keys to exclude — only valid with `--all` |
+
+There's no default scope — running without `--only` or `--all` is a hard error. That's deliberate: a command that's supposed to see one database URL shouldn't silently gain access to every secret in the environment because a flag was forgotten.
+
+## Two ways to receive a value
+
+**As a real environment variable** in the child process — the common case. Any program that reads `process.env` / `os.Getenv` / etc. just works, no code changes:
+
+```bash
+snapenv run --env prod --only DATABASE_URL -- node server.js
+# server.js reads process.env.DATABASE_URL normally
+```
+
+**As a `{{VAR_NAME}}` placeholder** inside the command's own arguments, resolved immediately before exec — for tools like `curl` where the value has to be a literal argument, not something read from the environment:
+
+```bash
+snapenv run --only API_TOKEN -- curl -H "Authorization: Bearer {{API_TOKEN}}" https://api.example.com
+```
+
+A placeholder referencing a key outside the current scope is an error, and the command never starts — this is what stops a typo (or an over-eager AI agent guessing at a variable name) from silently passing the literal string `{{FOO}}` through instead of failing loudly.
+
+## Output scrubbing
+
+Anything the command prints — stdout or stderr — is scanned as it streams, and any occurrence of an exposed value is replaced with `***` before you (or an agent watching the command's output) ever see it. This is what protects against a secret leaking back out through a side channel the command wasn't asked to use: a verbose `--debug` flag, an accidental `console.log`, a stack trace on crash.
+
+Values shorter than 6 characters are never scrubbed — a `PORT` of `3000` or a `LOG_LEVEL` of `debug` would otherwise collide with completely unrelated output far more often than they'd ever protect anything.
+
+Scrubbing works correctly even when a value is split across two separate writes to the command's output (e.g. a slow process flushing one byte at a time) — the buffering that makes this reliable trades a small amount of latency (at most one secret's length) for correctness, so still effectively real-time for normal output volumes.
+
+## What this is not
+
+`snapenv run` is not a sandbox. It reduces the chance of an honest mistake — a verbose log, a careless `echo $DATABASE_URL`, a crash that dumps the environment — not a guarantee against a program that's deliberately trying to exfiltrate its own environment. If you don't trust the command, `snapenv run` isn't what makes it trustworthy.
+
+## Exit codes
+
+The command's own exit code is passed straight through — `snapenv run` exits with whatever the process it ran exited with. A scope/validation error (bad flags, an out-of-scope placeholder, missing `--`) exits `1` before the command ever starts.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/coolify
+==============================================================================
+
+# Coolify
+
+Coolify deploys applications as long-running Docker containers, so it takes the same [`snapenv run`](/guide/cli-run) pattern as Railway, Render, and Dokploy — wrap the process instead of managing a secrets list in Coolify's own UI.
+
+## Set the bootstrap variables
+
+In your Coolify application → **Environment Variables**, add only these three:
+
+```
+SNAPENV_TOKEN=snp_live_xxxxxxxxxxxx
+SNAPENV_PROJECT=4fac4b02-...
+SNAPENV_ENV=prod
+```
+
+## Override the start command
+
+In the application's general settings, set the start command to:
+
+```bash
+snapenv run --all -- node dist/server.js
+```
+
+## Or install the CLI in your Dockerfile
+
+```dockerfile
+FROM ghcr.io/snapenv-io/cli:latest AS snapenv
+FROM node:20-alpine
+COPY --from=snapenv /usr/local/bin/snapenv /usr/local/bin/snapenv
+WORKDIR /app
+COPY . .
+RUN npm ci
+CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
+```
+
+## Notes
+
+- Coolify is commonly self-hosted alongside SnapEnv itself — in that setup, secrets never leave infrastructure you control at any point in the pipeline.
+- Redeploy after rotating a secret in the dashboard — `snapenv run` resolves values once, at process start, not continuously.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/dokploy
+==============================================================================
+
+# Dokploy
+
+Dokploy deploys your service as a long-running Docker container, so the same [`snapenv run`](/guide/cli-run) pattern used for Railway and Render applies directly — set it as the container's command.
+
+## Set the bootstrap variables
+
+In your Dokploy application → **Environment**, add only these three:
+
+```
+SNAPENV_TOKEN=snp_live_xxxxxxxxxxxx
+SNAPENV_PROJECT=4fac4b02-...
+SNAPENV_ENV=prod
+```
+
+## Override the container command
+
+In the application's Docker settings, set the command to:
+
+```bash
+snapenv run --all -- node dist/server.js
+```
+
+## Or install the CLI in your Dockerfile
+
+```dockerfile
+FROM ghcr.io/snapenv-io/cli:latest AS snapenv
+FROM node:20-alpine
+COPY --from=snapenv /usr/local/bin/snapenv /usr/local/bin/snapenv
+WORKDIR /app
+COPY . .
+RUN npm ci
+CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
+```
+
+## Notes
+
+- Because Dokploy is self-hosted, `SNAPENV_TOKEN` is the only credential that needs to leave your infrastructure at all if you're also self-hosting the SnapEnv API.
+- Redeploy (or restart) the application after rotating a secret in the dashboard — `snapenv run` resolves values once, at process start.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/railway
+==============================================================================
+
+# Railway
+
+Railway runs your service as a long-lived process, so you can skip the "write a .env file" step entirely and inject secrets straight into the running process with [`snapenv run`](/guide/cli-run) — they never touch disk or Railway's own Variables store.
+
+## Set the bootstrap variables
+
+In your Railway service → **Variables**, add only these three:
+
+```
+SNAPENV_TOKEN=snp_live_xxxxxxxxxxxx
+SNAPENV_PROJECT=4fac4b02-...
+SNAPENV_ENV=prod
+```
+
+## Wrap your start command
+
+Set a **Custom Start Command** that installs the CLI once and runs your process through it:
+
+```bash
+curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv run --all -- node dist/server.js
+```
+
+`snapenv run` pulls the current variable set for `SNAPENV_ENV`, injects it into the child process's real environment, and exits with the same code your app exits with — Railway's restart/crash detection works unchanged.
+
+## Or bake it into the image
+
+If you deploy via Dockerfile instead of Railway's buildpacks:
+
+```dockerfile
+FROM ghcr.io/snapenv-io/cli:latest AS snapenv
+FROM node:20-alpine
+COPY --from=snapenv /usr/local/bin/snapenv /usr/local/bin/snapenv
+WORKDIR /app
+COPY . .
+RUN npm ci
+CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
+```
+
+## Notes
+
+- `--all` scopes every variable in `SNAPENV_ENV` into the process; use `--only DATABASE_URL,STRIPE_KEY` to inject a narrower set.
+- A rotation in the dashboard takes effect on the next deploy/restart — `snapenv run` resolves values at process start, not continuously.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/render
+==============================================================================
+
+# Render
+
+Like Railway, a Render web service is a long-running process — wrap its start command with [`snapenv run`](/guide/cli-run) instead of managing secrets through Render's own Environment tab.
+
+## Set the bootstrap variables
+
+In your Render service → **Environment**, add only these three:
+
+```
+SNAPENV_TOKEN=snp_live_xxxxxxxxxxxx
+SNAPENV_PROJECT=4fac4b02-...
+SNAPENV_ENV=prod
+```
+
+## Wrap your start command
+
+Set the service's **Start Command** to:
+
+```bash
+curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv run --all -- node dist/server.js
+```
+
+Render's build step still runs your normal build command (`npm run build`, etc.) — only the start command changes, so build-time behavior is untouched.
+
+## Docker-based services
+
+If your Render service deploys from a Dockerfile:
+
+```dockerfile
+FROM ghcr.io/snapenv-io/cli:latest AS snapenv
+FROM node:20-alpine
+COPY --from=snapenv /usr/local/bin/snapenv /usr/local/bin/snapenv
+WORKDIR /app
+COPY . .
+RUN npm ci
+CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
+```
+
+## Notes
+
+- Render restarts the service on deploy and on crash; `snapenv run` re-resolves variables each time the process starts, so a rotated secret is picked up on the next restart.
+- Background workers and cron jobs on Render follow the same pattern — prefix whatever command Render would otherwise run with `snapenv run --all --`.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/vercel
+==============================================================================
+
+# Vercel
+
+Pull secrets into the build — the only thing that ever touches Vercel's own environment variable store is your SnapEnv token.
+
+Vercel builds are ephemeral and mostly framework-driven, so the integration point is the build step, not a long-running process: `snapenv pull` writes a local `.env` file just before your framework's build command reads it.
+
+## Set the bootstrap variables
+
+In your Vercel project → **Settings → Environment Variables**, add only these three — everything else stays in SnapEnv:
+
+```
+SNAPENV_TOKEN=snp_live_xxxxxxxxxxxx
+SNAPENV_PROJECT=4fac4b02-...
+SNAPENV_ENV=prod
+```
+
+Scope `SNAPENV_ENV` per Vercel environment (`prod` for Production, `staging` for Preview) so a preview deploy never pulls production secrets.
+
+## Wire it into the build
+
+Add a `vercel-build` script — Vercel runs this instead of `build` automatically if it exists:
+
+```json
+{
+  "scripts": {
+    "vercel-build": "curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv pull --env $SNAPENV_ENV --output .env.production.local && next build"
+  }
+}
+```
+
+Next.js, Vite, and most frameworks auto-load `.env.production.local` (or `.env.local`) at build time — swap the filename for your framework's convention. `.env*.local` is gitignored by every standard framework starter, so nothing written here risks a commit.
+
+## Override the build command instead
+
+If you'd rather not touch `package.json`, set a custom **Build Command** in Vercel project settings:
+
+```bash
+curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv pull --env prod --output .env.production.local && next build
+```
+
+## Notes
+
+- Vercel Serverless/Edge Functions read `process.env` at request time from whatever Vercel baked in at build — there's no long-running process to wrap with `snapenv run` the way there is on Railway or Render.
+- Rotate `SNAPENV_TOKEN` in the dashboard any time without touching Vercel — only that one token, not your actual secrets, lives in Vercel's project settings.
