@@ -1222,23 +1222,28 @@ Go to your repo → **Settings → Secrets and variables → Actions → New rep
 
 Optionally store your project ID as a variable: **Variables → New variable**, name it `SNAPENV_PROJECT`.
 
-**2. Add a workflow step:**
+**2. Add workflow steps:**
 
 ```yaml
+- name: Install snapenv
+  run: |
+    curl -fsSL https://get.snapenv.io/install.sh | sh
+    echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
 - name: Pull secrets
   env:
     SNAPENV_TOKEN: ${{ secrets.SNAPENV_TOKEN }}
     SNAPENV_PROJECT: ${{ vars.SNAPENV_PROJECT }}
     SNAPENV_ENV: prod
-  run: |
-    curl -fsSL https://get.snapenv.io/install.sh | sh
-    snapenv pull --env prod
-    # Variables are now in .env
+  run: snapenv pull --env prod
+  # Variables are now in .env
 ```
+
+The install script puts the binary in `~/.local/bin`, which isn't on `PATH` yet in the same step that installed it. Appending to `$GITHUB_PATH` — not a plain `export PATH=...` — is what makes it available to every later step in the job, since each `run:` step is a fresh shell.
 
 ## Export to GITHUB_ENV
 
-When `GITHUB_ACTIONS=true`, `snapenv pull` automatically appends all variables to `$GITHUB_ENV` — making them available to all subsequent steps without sourcing a file:
+When `GITHUB_ACTIONS=true`, `snapenv pull` automatically appends all variables to `$GITHUB_ENV` — making them available to all subsequent steps without sourcing a file. This assumes the **Install snapenv** step above already ran earlier in the job:
 
 ```yaml
 - name: Pull secrets to environment
@@ -1267,10 +1272,13 @@ To avoid downloading the CLI on every run, cache it:
 
 - name: Install snapenv
   run: |
-    if ! command -v snapenv &> /dev/null; then
+    if [ ! -x "$HOME/.local/bin/snapenv" ]; then
       curl -fsSL https://get.snapenv.io/install.sh | sh
     fi
+    echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 ```
+
+`$GITHUB_PATH` still needs to be set every run, cache hit or not — only the download is skipped on a hit.
 
 ## Use a project-scoped token
 
@@ -2078,10 +2086,10 @@ SNAPENV_ENV=prod
 
 ## Override the start command
 
-In the application's general settings, set the start command to:
+If the image has `curl` available, set the start command in the application's general settings to install and run in one step:
 
 ```bash
-snapenv run --all -- node dist/server.js
+curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && snapenv run --all -- node dist/server.js
 ```
 
 ## Or install the CLI in your Dockerfile
@@ -2098,6 +2106,7 @@ CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
 
 ## Notes
 
+- The install script puts the binary in `~/.local/bin`, which isn't on `PATH` yet inside that same command — the `export PATH=...` between install and `snapenv run` is required, or you'll hit `snapenv: command not found`.
 - Coolify is commonly self-hosted alongside SnapEnv itself — in that setup, secrets never leave infrastructure you control at any point in the pipeline.
 - Redeploy after rotating a secret in the dashboard — `snapenv run` resolves values once, at process start, not continuously.
 
@@ -2122,10 +2131,10 @@ SNAPENV_ENV=prod
 
 ## Override the container command
 
-In the application's Docker settings, set the command to:
+If the image has `curl` available, set the command in the application's Docker settings to install and run in one step:
 
 ```bash
-snapenv run --all -- node dist/server.js
+curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && snapenv run --all -- node dist/server.js
 ```
 
 ## Or install the CLI in your Dockerfile
@@ -2142,6 +2151,7 @@ CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
 
 ## Notes
 
+- The install script puts the binary in `~/.local/bin`, which isn't on `PATH` yet inside that same command — the `export PATH=...` between install and `snapenv run` is required, or you'll hit `snapenv: command not found`.
 - Because Dokploy is self-hosted, `SNAPENV_TOKEN` is the only credential that needs to leave your infrastructure at all if you're also self-hosting the SnapEnv API.
 - Redeploy (or restart) the application after rotating a secret in the dashboard — `snapenv run` resolves values once, at process start.
 
@@ -2169,7 +2179,7 @@ SNAPENV_ENV=prod
 Set a **Custom Start Command** that installs the CLI once and runs your process through it:
 
 ```bash
-curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv run --all -- node dist/server.js
+curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && snapenv run --all -- node dist/server.js
 ```
 
 `snapenv run` pulls the current variable set for `SNAPENV_ENV`, injects it into the child process's real environment, and exits with the same code your app exits with — Railway's restart/crash detection works unchanged.
@@ -2190,6 +2200,7 @@ CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
 
 ## Notes
 
+- The install script puts the binary in `~/.local/bin`, which isn't on `PATH` yet inside that same command — the `export PATH=...` between install and `snapenv run` is required, or you'll hit `snapenv: command not found`.
 - `--all` scopes every variable in `SNAPENV_ENV` into the process; use `--only DATABASE_URL,STRIPE_KEY` to inject a narrower set.
 - A rotation in the dashboard takes effect on the next deploy/restart — `snapenv run` resolves values at process start, not continuously.
 
@@ -2217,7 +2228,7 @@ SNAPENV_ENV=prod
 Set the service's **Start Command** to:
 
 ```bash
-curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv run --all -- node dist/server.js
+curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && snapenv run --all -- node dist/server.js
 ```
 
 Render's build step still runs your normal build command (`npm run build`, etc.) — only the start command changes, so build-time behavior is untouched.
@@ -2238,6 +2249,7 @@ CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
 
 ## Notes
 
+- The install script puts the binary in `~/.local/bin`, which isn't on `PATH` yet inside that same command — the `export PATH=...` between install and `snapenv run` is required, or you'll hit `snapenv: command not found`.
 - Render restarts the service on deploy and on crash; `snapenv run` re-resolves variables each time the process starts, so a rotated secret is picked up on the next restart.
 - Background workers and cron jobs on Render follow the same pattern — prefix whatever command Render would otherwise run with `snapenv run --all --`.
 
@@ -2271,7 +2283,7 @@ Add a `vercel-build` script — Vercel runs this instead of `build` automaticall
 ```json
 {
   "scripts": {
-    "vercel-build": "curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv pull --env $SNAPENV_ENV --output .env.production.local && next build"
+    "vercel-build": "curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH=\"$HOME/.local/bin:$PATH\" && snapenv pull --env $SNAPENV_ENV --output .env.production.local && next build"
   }
 }
 ```
@@ -2283,10 +2295,11 @@ Next.js, Vite, and most frameworks auto-load `.env.production.local` (or `.env.l
 If you'd rather not touch `package.json`, set a custom **Build Command** in Vercel project settings:
 
 ```bash
-curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv pull --env prod --output .env.production.local && next build
+curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && snapenv pull --env prod --output .env.production.local && next build
 ```
 
 ## Notes
 
+- The install script puts the binary in `~/.local/bin`, which isn't on `PATH` yet inside that same build step — `export PATH="$HOME/.local/bin:$PATH"` between the install and the `snapenv` call is required, not optional, or you'll hit `snapenv: command not found`.
 - Vercel Serverless/Edge Functions read `process.env` at request time from whatever Vercel baked in at build — there's no long-running process to wrap with `snapenv run` the way there is on Railway or Render.
 - Rotate `SNAPENV_TOKEN` in the dashboard any time without touching Vercel — only that one token, not your actual secrets, lives in Vercel's project settings.

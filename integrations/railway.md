@@ -17,7 +17,7 @@ SNAPENV_ENV=prod
 Set a **Custom Start Command** that installs the CLI once and runs your process through it:
 
 ```bash
-curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv run --all -- node dist/server.js
+curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && snapenv run --all -- node dist/server.js
 ```
 
 `snapenv run` pulls the current variable set for `SNAPENV_ENV`, injects it into the child process's real environment, and exits with the same code your app exits with — Railway's restart/crash detection works unchanged.
@@ -38,5 +38,6 @@ CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
 
 ## Notes
 
+- The install script puts the binary in `~/.local/bin`, which isn't on `PATH` yet inside that same command — the `export PATH=...` between install and `snapenv run` is required, or you'll hit `snapenv: command not found`.
 - `--all` scopes every variable in `SNAPENV_ENV` into the process; use `--only DATABASE_URL,STRIPE_KEY` to inject a narrower set.
 - A rotation in the dashboard takes effect on the next deploy/restart — `snapenv run` resolves values at process start, not continuously.

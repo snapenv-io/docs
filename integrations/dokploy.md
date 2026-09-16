@@ -14,10 +14,10 @@ SNAPENV_ENV=prod
 
 ## Override the container command
 
-In the application's Docker settings, set the command to:
+If the image has `curl` available, set the command in the application's Docker settings to install and run in one step:
 
 ```bash
-snapenv run --all -- node dist/server.js
+curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && snapenv run --all -- node dist/server.js
 ```
 
 ## Or install the CLI in your Dockerfile
@@ -34,5 +34,6 @@ CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
 
 ## Notes
 
+- The install script puts the binary in `~/.local/bin`, which isn't on `PATH` yet inside that same command — the `export PATH=...` between install and `snapenv run` is required, or you'll hit `snapenv: command not found`.
 - Because Dokploy is self-hosted, `SNAPENV_TOKEN` is the only credential that needs to leave your infrastructure at all if you're also self-hosting the SnapEnv API.
 - Redeploy (or restart) the application after rotating a secret in the dashboard — `snapenv run` resolves values once, at process start.

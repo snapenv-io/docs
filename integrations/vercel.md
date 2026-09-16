@@ -23,7 +23,7 @@ Add a `vercel-build` script — Vercel runs this instead of `build` automaticall
 ```json
 {
   "scripts": {
-    "vercel-build": "curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv pull --env $SNAPENV_ENV --output .env.production.local && next build"
+    "vercel-build": "curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH=\"$HOME/.local/bin:$PATH\" && snapenv pull --env $SNAPENV_ENV --output .env.production.local && next build"
   }
 }
 ```
@@ -35,10 +35,11 @@ Next.js, Vite, and most frameworks auto-load `.env.production.local` (or `.env.l
 If you'd rather not touch `package.json`, set a custom **Build Command** in Vercel project settings:
 
 ```bash
-curl -fsSL https://get.snapenv.io/install.sh | sh && snapenv pull --env prod --output .env.production.local && next build
+curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && snapenv pull --env prod --output .env.production.local && next build
 ```
 
 ## Notes
 
+- The install script puts the binary in `~/.local/bin`, which isn't on `PATH` yet inside that same build step — `export PATH="$HOME/.local/bin:$PATH"` between the install and the `snapenv` call is required, not optional, or you'll hit `snapenv: command not found`.
 - Vercel Serverless/Edge Functions read `process.env` at request time from whatever Vercel baked in at build — there's no long-running process to wrap with `snapenv run` the way there is on Railway or Render.
 - Rotate `SNAPENV_TOKEN` in the dashboard any time without touching Vercel — only that one token, not your actual secrets, lives in Vercel's project settings.

@@ -14,10 +14,10 @@ SNAPENV_ENV=prod
 
 ## Override the start command
 
-In the application's general settings, set the start command to:
+If the image has `curl` available, set the start command in the application's general settings to install and run in one step:
 
 ```bash
-snapenv run --all -- node dist/server.js
+curl -fsSL https://get.snapenv.io/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && snapenv run --all -- node dist/server.js
 ```
 
 ## Or install the CLI in your Dockerfile
@@ -34,5 +34,6 @@ CMD ["snapenv", "run", "--all", "--", "node", "dist/server.js"]
 
 ## Notes
 
+- The install script puts the binary in `~/.local/bin`, which isn't on `PATH` yet inside that same command — the `export PATH=...` between install and `snapenv run` is required, or you'll hit `snapenv: command not found`.
 - Coolify is commonly self-hosted alongside SnapEnv itself — in that setup, secrets never leave infrastructure you control at any point in the pipeline.
 - Redeploy after rotating a secret in the dashboard — `snapenv run` resolves values once, at process start, not continuously.
