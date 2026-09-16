@@ -47,6 +47,7 @@ export default defineConfig({
           items: [
             { text: 'Installation',    link: '/guide/cli' },
             { text: 'pull',            link: '/guide/cli-pull' },
+            { text: 'run',             link: '/guide/cli-run' },
             { text: 'push',            link: '/guide/cli-push' },
             { text: 'diff',            link: '/guide/cli-diff' },
             { text: 'projects',        link: '/guide/cli-projects' },

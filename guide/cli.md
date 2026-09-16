@@ -67,6 +67,7 @@ snapenv upgrade --check   # check without installing
 |---|---|
 | [`snapenv login`](/guide/cli#login) | Save credentials to config |
 | [`snapenv pull`](/guide/cli-pull) | Pull variables to a file or stdout |
+| [`snapenv run`](/guide/cli-run) | Run a command with variables injected — no `.env` file, scrubbed output |
 | [`snapenv push`](/guide/cli-push) | Push a local `.env` file to SnapEnv |
 | [`snapenv diff`](/guide/cli-diff) | Compare local file to remote |
 | [`snapenv projects`](/guide/cli-projects) | List all projects in the workspace |
