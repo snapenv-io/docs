@@ -27,6 +27,12 @@ Select multiple variables using the checkbox column to:
 
 Every write (create, update, delete) is recorded. Click a variable → **History** to see all versions with timestamps and actors. Click **Restore** on any entry to roll back to that value.
 
+## Variable references
+
+Use `${VAR}` syntax in a value to reference another variable in the same environment, instead of duplicating values across keys. Resolves dynamically at read time — change the referenced variable once and everything that points to it updates automatically.
+
+See [Variable references](/guide/variable-references) for syntax, fallback values, and circular-reference behavior.
+
 ## Expiry dates
 
 Set an expiry date on a variable to track when a credential needs rotating. SnapEnv sends an email reminder when a secret is within 7 days of expiry.

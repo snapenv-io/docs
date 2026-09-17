@@ -139,6 +139,12 @@ Select multiple variables using the checkbox column to:
 
 Every write (create, update, delete) is recorded. Click a variable → **History** to see all versions with timestamps and actors. Click **Restore** on any entry to roll back to that value.
 
+## Variable references
+
+Use `${VAR}` syntax in a value to reference another variable in the same environment, instead of duplicating values across keys. Resolves dynamically at read time — change the referenced variable once and everything that points to it updates automatically.
+
+See [Variable references](/guide/variable-references) for syntax, fallback values, and circular-reference behavior.
+
 ## Expiry dates
 
 Set an expiry date on a variable to track when a credential needs rotating. SnapEnv sends an email reminder when a secret is within 7 days of expiry.
@@ -1660,10 +1666,14 @@ List variables. Values are masked by default.
 ```json
 {
   "vars": [
-    { "key": "DATABASE_URL", "value": "***", "type": "secret", "updatedAt": "...", "expiresAt": null }
+    { "key": "DATABASE_URL", "value": "***", "type": "secret", "updatedAt": "...", "expiresAt": null },
+    { "key": "API_URL", "value": "${APP_URL}/api", "type": "plain", "updatedAt": "...", "expiresAt": null,
+      "resolvedValue": "https://app.com/api" }
   ]
 }
 ```
+
+`resolvedValue` is included only when a value contains a [variable reference](/guide/variable-references) (`${VAR}` syntax) — the raw `value` field always stays whatever was actually stored, so editing shows the literal reference, not the resolved result. A reference stuck in a circular chain adds a `resolveError` string instead of resolving.
 
 ## POST /v1/projects/:id/vars
 
@@ -1749,6 +1759,16 @@ operator for `304` conditional sync) stays stable. Suppress with
 Multi-line values are emitted double-quoted with escaped newlines so they
 survive standard dotenv parsing.
 
+Values containing a [variable reference](/guide/variable-references) (`${VAR}` syntax)
+are resolved before output — the dotenv body always carries final values, never
+the raw `${...}` text. If a reference is part of a circular chain, Pull hard-fails
+rather than shipping broken config:
+
+```json
+// response 422
+{ "error": "CIRCULAR_REFERENCE", "message": "API_URL: circular reference detected", "key": "API_URL" }
+```
+
 ## GET /v1/projects/:id/envs/:env/export
 
 Download all variables as a file.
@@ -1758,6 +1778,10 @@ Download all variables as a file.
 ?reveal=true     include plaintext values (requires write perm)
 ?metadata=false  omit the injected SNAPENV_* context variables (default: on)
 ```
+
+Variable references are resolved the same way as Pull, but a circular reference
+here never blocks the download — the affected value is left unresolved rather
+than failing the whole export.
 
 
 ==============================================================================
@@ -2064,6 +2088,59 @@ Scrubbing works correctly even when a value is split across two separate writes 
 ## Exit codes
 
 The command's own exit code is passed straight through — `snapenv run` exits with whatever the process it ran exited with. A scope/validation error (bad flags, an out-of-scope placeholder, missing `--`) exits `1` before the command ever starts.
+
+
+==============================================================================
+# Source: https://docs.snapenv.io/guide/variable-references
+==============================================================================
+
+# Variable references
+
+Reference one variable's value from another using `${VAR}` syntax, instead of duplicating the same value across multiple keys.
+
+```
+APP_URL=https://app.example.com
+API_URL=${APP_URL}/api
+```
+
+`API_URL` always resolves to `https://app.example.com/api` — change `APP_URL` once and every variable that references it updates automatically, with no need to touch each one by hand.
+
+## Fallback values
+
+Use `${VAR:-fallback}` to substitute a default when the referenced variable is unset or empty:
+
+```
+LOG_LEVEL=${LOG_LEVEL:-info}
+```
+
+The fallback fires whenever the referenced variable is missing **or** empty — not just when it's undefined.
+
+## Chained references
+
+References can chain through multiple variables:
+
+```
+REGION=us-east-1
+BUCKET=snapenv-${REGION}
+BACKUP_URL=s3://${BUCKET}/backups
+```
+
+`BACKUP_URL` resolves through `BUCKET` and `REGION` to `s3://snapenv-us-east-1/backups`.
+
+## Circular references
+
+A reference chain that loops back on itself (`A` → `B` → `A`) can't resolve. Behavior differs by endpoint:
+
+- **Pull** (CLI, Kubernetes operator) fails with `422 CIRCULAR_REFERENCE` rather than injecting broken config into a running service.
+- **List and Export** resolve everything they can and flag only the affected variable, so you can still see and fix the rest of your variables.
+
+## Where it applies
+
+References are resolved dynamically, scoped to a single project + environment — a variable can only reference other variables in the same environment. Resolution happens server-side at read time; the stored value is always the literal `${VAR}` text, so editing a variable shows the reference, not the resolved result.
+
+- **Dashboard**: the variable list shows a **resolved** badge on any value containing a reference — hover it to see what it resolves to, or a **cycle** badge if it's part of a circular reference.
+- **CLI** (`pull`, `run`): receives already-resolved values — no changes needed on your end.
+- **API**: see [List](/api/variables#get-v1-projects-id-envs-env-vars) and [Pull](/api/variables#get-v1-projects-id-envs-env-pull) for exact response shapes.
 
 
 ==============================================================================

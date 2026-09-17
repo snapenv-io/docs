@@ -58,6 +58,7 @@ export default defineConfig({
           text: 'Dashboard',
           items: [
             { text: 'Variables',       link: '/guide/variables' },
+            { text: 'Variable references', link: '/guide/variable-references' },
             { text: 'Environments',    link: '/guide/environments' },
             { text: 'Team & access',   link: '/guide/team' },
             { text: 'Access tokens',   link: '/guide/tokens' },
