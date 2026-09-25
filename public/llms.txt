@@ -122,4 +122,4 @@ Tokens are stored as bcrypt(sha256(plaintext)) — the plaintext is shown once a
 - SnapEnv vs Doppler: https://snapenv.io/vs/doppler — SnapEnv is flat-priced and CLI-first; Doppler is a managed, per-seat cloud platform.
 - SnapEnv vs HashiCorp Vault: https://snapenv.io/vs/vault — SnapEnv is a low-ops manager for environment variables; Vault is a powerful but operationally heavy secrets engine with dynamic secrets.
 - SnapEnv vs AWS Secrets Manager: https://snapenv.io/vs/aws-secrets-manager — SnapEnv is cloud-agnostic and flat-priced; AWS Secrets Manager is AWS-native and priced per secret and API call.
-- SnapEnv vs EnvManager: https://snapenv.io/vs/envmanager — both let Claude Code and Cursor use secrets without seeing them; SnapEnv is self-hostable with a native Kubernetes operator, EnvManager is hosted-only with broader platform integrations and a frontend API proxy.
+- SnapEnv vs EnvManager: https://snapenv.io/vs/envmanager — both let Claude Code and Cursor use secrets without seeing them; SnapEnv is permanently flat-priced with a native Kubernetes operator, EnvManager has broader platform integrations and a frontend API proxy.

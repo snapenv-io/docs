@@ -1,3 +1,7 @@
+==============================================================================
+# Source: https://docs.snapenv.io/integrations/kubernetes
+==============================================================================
+
 # Kubernetes Operator
 
 The SnapEnv operator automatically syncs variables into native Kubernetes Secrets. No init containers, no custom scripts — just a CRD and a controller.

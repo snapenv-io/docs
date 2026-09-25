@@ -6,6 +6,11 @@ export default defineConfig({
   lang: 'en-US',
   cleanUrls: true,
   sitemap: { hostname: 'https://docs.snapenv.io' },
+  // skill-src/ holds the source for the generated AI-agent skill package
+  // (public/skill/, built by gen-skill.py) — it's markdown but not a doc
+  // page, and its relative links (reference/cli.md etc.) resolve inside
+  // the generated package, not as VitePress routes.
+  srcExclude: ['skill-src/**'],
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
@@ -40,6 +45,7 @@ export default defineConfig({
             { text: 'Introduction',    link: '/guide/introduction' },
             { text: 'Quick start',     link: '/guide/quick-start' },
             { text: 'Authentication',  link: '/guide/authentication' },
+            { text: 'AI agents',       link: '/guide/ai-agents' },
           ],
         },
         {
