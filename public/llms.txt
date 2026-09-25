@@ -111,11 +111,14 @@ Tokens are stored as bcrypt(sha256(plaintext)) — the plaintext is shown once a
 ## Links
 
 - Website: https://snapenv.io
+- About: https://snapenv.io/about
+- Security: https://snapenv.io/security
 - Dashboard: https://dash.snapenv.io
 - Documentation: https://docs.snapenv.io
 - Quick start: https://docs.snapenv.io/guide/quick-start
 - CLI reference: https://docs.snapenv.io/guide/cli
-- AI agent skill: https://docs.snapenv.io/guide/ai-agents
+- AI agents: https://snapenv.io/ai-agents
+- AI agent skill install: https://docs.snapenv.io/guide/ai-agents
 - API reference: https://docs.snapenv.io/api/overview
 - Kubernetes Operator: https://docs.snapenv.io/integrations/kubernetes
 - GitHub Actions: https://docs.snapenv.io/integrations/github-actions
