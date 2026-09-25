@@ -141,7 +141,7 @@ SNAPENV_SKILL_DIR=~/.claude/skills/snapenv curl -fsSL https://get.snapenv.io/ski
 - **Permissions** — access-token scopes, the workspace/project/environment role model
 - **Variables & webhooks** — variable references, expiry, encryption, and change notifications
 
-It's generated from this documentation site, so it stays in sync with what you're reading here — see [SKILL.md](https://docs.snapenv.io/skill/SKILL.md) and its [reference files](https://docs.snapenv.io/skill/) directly if you want to see exactly what the agent gets.
+It's generated from this documentation site, so it stays in sync with what you're reading here — see [SKILL.md](https://docs.snapenv.io/skill/SKILL.md) and its [reference files on GitHub](https://github.com/snapenv-io/docs/tree/main/public/skill/reference) directly if you want to see exactly what the agent gets.
 
 ## Why `snapenv run` for agents specifically
 
