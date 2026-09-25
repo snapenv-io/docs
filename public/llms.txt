@@ -25,11 +25,15 @@ Create a workspace, invite members, and set per-project and per-environment perm
 **How do I inject secrets into GitHub Actions / Docker / CI?**
 Use the CLI in non-interactive mode: set `SNAPENV_TOKEN`, `SNAPENV_PROJECT`, and `SNAPENV_ENV`, then run `snapenv pull`. In GitHub Actions it also appends variables to `$GITHUB_ENV`. For containers, use the init-container pattern.
 
+**How do I let Claude Code or another AI coding agent use my secrets without exposing them?**
+Install the SnapEnv skill: `curl -fsSL https://get.snapenv.io/skill.sh | sh`. It teaches the agent to use `snapenv run --only KEY -- <command>`, which injects variables into the child process (or as scrubbed placeholders in its arguments) without ever writing them to disk or printing them — and scrubs any exposed value from the command's own output as it streams. The secret never passes through a file the agent wrote or its own chat transcript. See https://docs.snapenv.io/guide/ai-agents
+
 ## Key features
 
 - AES-256-GCM encryption at rest. Each project has a unique key derived via HKDF-SHA256. No plaintext is ever stored in the database.
 - CLI (`snapenv`) for pulling and pushing variables from any terminal, script, or CI pipeline. Single static binary, no runtime required (linux/macOS, amd64/arm64).
 - Kubernetes Operator that syncs secrets into native Kubernetes `v1/Secret` objects per namespace, reconciles on change, and can restart affected workloads.
+- Installable skill for Claude Code and other AI coding agents — CLI, operator, Helm, and API reference in one package.
 - GitHub Actions integration for injecting variables into CI runs.
 - Docker / Docker Compose support via the init-container pattern.
 - Per-environment permissions: developers can write to staging but only read (or not see) production.
@@ -111,6 +115,7 @@ Tokens are stored as bcrypt(sha256(plaintext)) — the plaintext is shown once a
 - Documentation: https://docs.snapenv.io
 - Quick start: https://docs.snapenv.io/guide/quick-start
 - CLI reference: https://docs.snapenv.io/guide/cli
+- AI agent skill: https://docs.snapenv.io/guide/ai-agents
 - API reference: https://docs.snapenv.io/api/overview
 - Kubernetes Operator: https://docs.snapenv.io/integrations/kubernetes
 - GitHub Actions: https://docs.snapenv.io/integrations/github-actions
