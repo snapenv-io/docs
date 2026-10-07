@@ -40,7 +40,7 @@ Install the SnapEnv skill: `curl -fsSL https://get.snapenv.io/skill.sh | sh`. It
 - Variable expiry: set TTLs on secrets and get notified before they expire.
 - Webhooks on variable changes.
 - Append-only audit log of every pull, push, change, and team action.
-- Team access control: workspace roles (Owner, Member) and project roles (Admin, Developer, Read-only).
+- Team access control: workspace roles (Owner, Member) and project roles (Admin, Maintainer, Developer, Read-only).
 - Flat, per-plan pricing (not per-seat).
 
 ## Plans

@@ -146,13 +146,18 @@ which depend on whether an environment is [protected](#protected-environments):
 | Role | Protected env (e.g. prod) | Unprotected env (e.g. dev/staging) |
 |---|---|---|
 | **Admin** | write | write |
+| **Maintainer** | write | write |
 | **Developer** | **none** | write |
-| **Read-only** | read | read |
+| **Read-only** | **none** | read |
 
-Developers get **no default access to protected environments** — least privilege,
-so production secrets aren't exposed to every developer. An Admin or Owner can still
-grant a specific developer `read` or `write` on a protected environment using a
+Developers and Read-only members get **no default access to protected environments** — least
+privilege, so production secrets aren't exposed to everyone on the project. An Admin or Owner
+can still grant a specific member `read` or `write` on a protected environment using a
 per-environment override (Layer 3).
+
+**Maintainer** has the same data access as Admin (read & write on every environment) but can't
+manage the project's team: only Owners and Admins can add members, change roles, or edit
+per-environment permissions.
 
 These are the defaults — individual environment permissions can always be overridden.
 
@@ -160,12 +165,12 @@ These are the defaults — individual environment permissions can always be over
 
 Each environment carries a **`protected`** flag. `prod` and `production` are protected
 by default; every other environment starts unprotected. Protection is what drives the
-"Developer gets no default access" rule above — and it keys off the flag, **not** the
+"Developers and Read-only members get no default access" rule above — and it keys off the flag, **not** the
 environment's name, so a production environment named `live` or `main` is fully covered
 once you mark it protected.
 
-Protecting an environment **only** changes the default for the **Developer** role. It does
-**not** restrict Owners, Admins, or Read-only members, and it doesn't change how secrets
+Protecting an environment **only** changes the default for the **Developer** and **Read-only** roles. It does
+**not** restrict Owners, Admins, or Maintainers, and it doesn't change how secrets
 are stored (everything is AES-256 encrypted regardless).
 
 Workspace Owners can toggle protection from the project toolbar (the 🔒 **Protect env**
@@ -225,8 +230,9 @@ Owners bypass all project-level checks. Members only see and access projects the
 | Role | Default prod | Default staging/dev |
 |---|---|---|
 | **Admin** | write | write |
-| **Developer** | read | write |
-| **Read-only** | read | read |
+| **Maintainer** | write | write (can't manage team) |
+| **Developer** | none | write |
+| **Read-only** | none | read |
 
 Assign a project role from the project's **Settings → Team** tab. You can also override per-environment permissions individually.
 

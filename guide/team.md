@@ -16,8 +16,9 @@ Owners bypass all project-level checks. Members only see and access projects the
 | Role | Default prod | Default staging/dev |
 |---|---|---|
 | **Admin** | write | write |
-| **Developer** | read | write |
-| **Read-only** | read | read |
+| **Maintainer** | write | write (can't manage team) |
+| **Developer** | none | write |
+| **Read-only** | none | read |
 
 Assign a project role from the project's **Settings → Team** tab. You can also override per-environment permissions individually.
 

@@ -13,9 +13,9 @@ developer by default. `prod` and `production` are protected automatically; you c
 any environment (e.g. a prod-like `live` or `eu-prod`) with the 🔒 **Protect env** button in
 the project toolbar — Owners only.
 
-On a protected environment, members with the **Developer** project role get **no default
-access** (they can't read or write its secrets) unless an Owner or Admin grants them an
-explicit per-environment permission. Admins, Read-only members, and Owners are unaffected.
+On a protected environment, members with the **Developer** or **Read-only** project role get
+**no default access** (they can't read its secrets) unless an Owner or Admin grants them an
+explicit per-environment permission. Admins, Maintainers, and Owners are unaffected.
 See [Permissions → Protected environments](/guide/permissions#protected-environments).
 
 ## Adding environments
