@@ -4,7 +4,7 @@ Get from zero to `snapenv pull` in under 5 minutes.
 
 ## 1. Create an account
 
-Sign up at [dash.snapenv.io](https://dash.snapenv.io/signup). A workspace is created automatically.
+Sign up at [dash.snapenv.io](https://dash.snapenv.io/login?mode=signup). A workspace is created automatically.
 
 ## 2. Create a project
 
