@@ -84,7 +84,7 @@ remote-only additions.
 
 ## GitHub Actions integration
 
-When `GITHUB_ACTIONS=true`, `snapenv pull` automatically appends all variables to `$GITHUB_ENV`, making them available to subsequent steps:
+When `GITHUB_ACTIONS=true`, `snapenv pull` automatically appends all variables to `$GITHUB_ENV`, making them available to subsequent steps. Each value is masked in the job's logs (`::add-mask::`) before it's exported:
 
 ```yaml
 - name: Pull secrets
