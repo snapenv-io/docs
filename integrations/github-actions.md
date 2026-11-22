@@ -43,9 +43,11 @@ When `GITHUB_ACTIONS=true`, `snapenv pull` automatically appends all variables t
 
 - name: Build
   run: |
-    echo $DATABASE_URL   # available — SnapEnv wrote it to GITHUB_ENV
+    echo $DATABASE_URL   # available — SnapEnv wrote it to GITHUB_ENV (printed as ***)
     npm run build
 ```
+
+Every value is also registered with `::add-mask::` before it's exported (CLI v1.0.1+), so GitHub replaces it with `***` in the job's logs, even if a later step prints it with `env`, `set -x` or a debug dump. Multi-line values such as PEM keys are masked line by line. Values shorter than 4 characters (`on`, `1`) are not masked, since masking them would hide every occurrence in the log.
 
 ## Cache the CLI binary
 
