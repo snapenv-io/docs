@@ -181,8 +181,25 @@ spec:
 | `project` | yes | SnapEnv project UUID |
 | `env` | yes | SnapEnv environment name |
 | `target` | yes | Name of the K8s Secret to create/update |
-| `apiUrl` | no | Override API URL (default: `https://api.snapenv.io`) |
+| `apiUrl` | no | Override API URL (default: `https://api.snapenv.io`). Must be `https://` and on a host the cluster admin allows — see below |
 | `syncInterval` | no | Fallback poll interval, min `1m` (default: `30m`) |
+
+### Which API hosts a resource may use
+
+The operator reads the token Secret with its own permissions and sends it to `apiUrl`, so a resource can't send it just anywhere. `spec.apiUrl` must be `https://` and its host must be one of:
+
+- `api.snapenv.io`
+- the host of the operator-wide `SNAPENV_API_URL` (self-hosted installs)
+- a host listed in `SNAPENV_ALLOWED_API_HOSTS` on the operator Deployment (comma-separated, `host` or `host:port`)
+
+```bash
+kubectl -n snapenv-operator set env deploy/snapenv-operator \
+  SNAPENV_ALLOWED_API_HOSTS=snap-eu.example.com,snap-dr.example.com:8443
+```
+
+Anything else fails with `spec.apiUrl host "…" is not allowed` in the resource's status, and no request is sent.
+
+The operator also never takes over an existing Secret: if `target` names a Secret it didn't create for this resource, the sync fails with `already exists and was not created by this SnapEnvSecret` instead of overwriting it.
 
 ## Status fields
 
