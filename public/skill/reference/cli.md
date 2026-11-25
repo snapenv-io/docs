@@ -65,6 +65,8 @@ snapenv upgrade           # install latest version
 snapenv upgrade --check   # check without installing
 ```
 
+Since v1.0.3, every release is signed, and `upgrade` checks that signature against a SnapEnv key built into the CLI before installing anything. It refuses an unsigned release, an older version than the one you have, and a download host on plain `http://`.
+
 ## Commands
 
 | Command | Description |
@@ -250,6 +252,8 @@ snapenv run --only API_TOKEN -- curl -H "Authorization: Bearer {{API_TOKEN}}" ht
 ```
 
 A placeholder referencing a key outside the current scope is an error, and the command never starts — this is what stops a typo (or an over-eager AI agent guessing at a variable name) from silently passing the literal string `{{FOO}}` through instead of failing loudly.
+
+**What the command doesn't get:** your SnapEnv access token. Since CLI v1.0.3, `snapenv run` removes `SNAPENV_TOKEN` from the command's environment, so a tool you run can only see the variables you scoped it to, not a credential that could pull the rest. Everything else in your shell environment is passed through as usual. If the command itself needs to call SnapEnv, expose a dedicated token as a project variable and include it in `--only`.
 
 ## Output scrubbing
 
