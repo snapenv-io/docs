@@ -61,6 +61,8 @@ snapenv upgrade           # install latest version
 snapenv upgrade --check   # check without installing
 ```
 
+Since v1.0.3, every release is signed, and `upgrade` checks that signature against a SnapEnv key built into the CLI before installing anything. It refuses an unsigned release, an older version than the one you have, and a download host on plain `http://`.
+
 ## Commands
 
 | Command | Description |
